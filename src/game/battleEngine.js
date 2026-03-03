@@ -5,6 +5,32 @@ const MAX_BOARD = 7;
 const MAX_MANA = 10;
 const STARTING_HP = 30;
 
+export const ARTIFACT_DEFS = {
+  warcry_aura: {
+    id: 'warcry_aura',
+    name: 'Warcry Aura',
+    description: 'All friendly minions get +1 Attack',
+    icon: '\u2694',
+    color: '#ffcc44'
+  },
+  fireball_turret: {
+    id: 'fireball_turret',
+    name: 'Fireball Turret',
+    description: 'End of turn: Deal 3 damage to enemy hero',
+    icon: '\u2737',
+    color: '#ff6644'
+  },
+  mana_crystal: {
+    id: 'mana_crystal',
+    name: 'Mana Crystal',
+    description: 'Start the game with +1 max mana',
+    icon: '\u25C6',
+    color: '#66aaff'
+  }
+};
+
+export const ALL_ARTIFACT_IDS = Object.keys(ARTIFACT_DEFS);
+
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -29,22 +55,26 @@ function makeMinion(card) {
   };
 }
 
-export function createBattleState(playerDeckIds, enemyDeckIds) {
+export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts = []) {
   const playerDeck = shuffle(playerDeckIds.map(id => getCardById(id)).filter(Boolean));
   const enemyDeck  = shuffle(enemyDeckIds.map(id => getCardById(id)).filter(Boolean));
+
+  const arts = new Set(playerArtifacts);
 
   const state = {
     player: {
       hp: STARTING_HP, maxHp: STARTING_HP,
       mana: 0, maxMana: 0,
       deck: playerDeck, hand: [], board: [],
-      fatigue: 0
+      fatigue: 0,
+      artifacts: playerArtifacts
     },
     enemy: {
       hp: STARTING_HP, maxHp: STARTING_HP,
       mana: 0, maxMana: 0,
       deck: enemyDeck, hand: [], board: [],
-      fatigue: 0
+      fatigue: 0,
+      artifacts: []
     },
     turn: 0,
     currentTurn: 'player',
@@ -52,6 +82,12 @@ export function createBattleState(playerDeckIds, enemyDeckIds) {
     winner: null,
     log: []
   };
+
+  if (arts.has('mana_crystal')) {
+    state.player.maxMana = 1;
+    state.player.mana = 1;
+    state.log.push('Mana Crystal: Start with +1 mana!');
+  }
 
   for (let i = 0; i < 3; i++) drawCard(state, 'player');
   for (let i = 0; i < 4; i++) drawCard(state, 'enemy');
@@ -94,6 +130,19 @@ export function startTurn(state, who) {
 
 export function endTurnTriggers(state, who) {
   processTriggers(state, who, 'turn_end');
+  processArtifactTriggers(state, who);
+}
+
+function processArtifactTriggers(state, who) {
+  const side = state[who];
+  const opp = who === 'player' ? state.enemy : state.player;
+  if (!side.artifacts) return;
+
+  if (side.artifacts.includes('fireball_turret') && state.phase !== 'over') {
+    opp.hp -= 3;
+    state.log.push(`Fireball Turret: 3 damage to ${who === 'player' ? 'enemy' : 'player'} hero!`);
+    checkWin(state);
+  }
 }
 
 function processTriggers(state, who, timing) {
@@ -132,6 +181,10 @@ export function playCard(state, who, handIndex, targetInfo) {
   if (card.type === 'minion') {
     if (side.board.length >= MAX_BOARD) return false;
     const minion = makeMinion(card);
+    if (side.artifacts && side.artifacts.includes('warcry_aura')) {
+      minion.atk += 1;
+      state.log.push(`  Warcry Aura: ${minion.name} gets +1 Attack`);
+    }
     side.board.push(minion);
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
   } else if (card.type === 'spell') {

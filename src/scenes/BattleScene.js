@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { loadDeck, loadCollection, saveCollection } from '../data/storage.js';
-import { getAllCards, getCardById, rebuildPool } from '../data/cardPool.js';
+import { loadDeck, loadArtifacts, saveArtifacts } from '../data/storage.js';
+import { getCardById } from '../data/cardPool.js';
 import {
   createBattleState, startTurn, endTurnTriggers, canPlayCard, playCard,
-  minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck
+  minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck,
+  ARTIFACT_DEFS, ALL_ARTIFACT_IDS
 } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
@@ -26,7 +27,8 @@ export default class BattleScene extends Phaser.Scene {
 
     const playerDeck = (data && data.playerDeck) || loadDeck() || [];
     const enemyDeck = (data && data.enemyDeck) || generateEnemyDeck();
-    this.bs = createBattleState(playerDeck, enemyDeck);
+    this.playerArtifacts = (data && data.artifacts) || loadArtifacts();
+    this.bs = createBattleState(playerDeck, enemyDeck, this.playerArtifacts);
     startTurn(this.bs, 'player');
 
     this.uiGroup = this.add.group();
@@ -48,6 +50,14 @@ export default class BattleScene extends Phaser.Scene {
     this.uiGroup.add(this.add.text(850, 570, `MANA ${s.player.mana}/${s.player.maxMana}`, {
       ...FONT, fontSize: '14px', color: '#66aaff'
     }));
+
+    if (this.playerArtifacts.length > 0) {
+      const artStr = this.playerArtifacts.map(id => {
+        const a = ARTIFACT_DEFS[id];
+        return a ? a.icon : '';
+      }).join(' ');
+      this.uiGroup.add(this.add.text(850, 596, artStr, { fontSize: '14px' }));
+    }
 
     this.drawHand();
 
@@ -285,57 +295,69 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   showRewardPick() {
-    this.uiGroup.add(this.add.text(512, 290, 'Pick a card reward:', {
+    const owned = new Set(loadArtifacts());
+    const available = ALL_ARTIFACT_IDS.filter(id => !owned.has(id));
+
+    if (available.length === 0) {
+      this.uiGroup.add(this.add.text(512, 380, 'All artifacts collected!', {
+        ...FONT, fontSize: '14px', color: '#e6b422'
+      }).setOrigin(0.5));
+
+      const btn = this.add.rectangle(512, 450, 200, 44, 0x334455).setInteractive({ useHandCursor: true });
+      btn.setStrokeStyle(2, 0x5577aa);
+      this.uiGroup.add(btn);
+      this.uiGroup.add(this.add.text(512, 450, 'RETURN TO HUB', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+      btn.on('pointerdown', () => this.scene.start('Hub'));
+      return;
+    }
+
+    this.uiGroup.add(this.add.text(512, 280, 'Pick an artifact:', {
       ...FONT, fontSize: '14px', color: '#e6b422'
     }).setOrigin(0.5));
 
-    const pool = getAllCards();
-    const rewards = [];
-    const used = new Set();
-    while (rewards.length < 3 && rewards.length < pool.length) {
-      const idx = Math.floor(Math.random() * pool.length);
-      if (!used.has(idx)) { used.add(idx); rewards.push(pool[idx]); }
-    }
+    const displayList = available.length <= 3 ? available : available.slice(0, 3);
+    const totalW = displayList.length * 212;
+    const startX = 512 - totalW / 2 + 106;
 
-    rewards.forEach((card, i) => {
-      const x = 300 + i * 212;
-      const y = 450;
+    displayList.forEach((artId, i) => {
+      const art = ARTIFACT_DEFS[artId];
+      const x = startX + i * 212;
+      const y = 440;
 
-      const bg = this.add.rectangle(x, y, 140, 170, 0x1a1a2a).setInteractive({ useHandCursor: true });
-      bg.setStrokeStyle(2, 0x556688);
+      const bg = this.add.rectangle(x, y, 180, 190, 0x1a1a2a).setInteractive({ useHandCursor: true });
+      const borderColor = Phaser.Display.Color.HexStringToColor(art.color).color;
+      bg.setStrokeStyle(2, borderColor);
       this.uiGroup.add(bg);
 
-      const key = spriteKey(card);
-      if (key && this.textures.exists(key)) {
-        this.uiGroup.add(this.add.image(x, y - 24, key).setDisplaySize(100, 80));
-      }
-
-      const costBg = this.add.circle(x - 56, y - 72, 14, 0x2244aa);
-      this.uiGroup.add(costBg);
-      this.uiGroup.add(this.add.text(x - 56, y - 72, `${card.cost}`, {
-        ...FONT, fontSize: '12px', color: '#fff'
+      this.uiGroup.add(this.add.text(x, y - 64, art.icon, {
+        fontSize: '36px'
       }).setOrigin(0.5));
 
-      this.uiGroup.add(this.add.rectangle(x, y + 30, 130, 16, 0x000000, 0.8));
-      this.uiGroup.add(this.add.text(x, y + 30, card.name, { ...FONT, fontSize: '8px', color: '#fff' }).setOrigin(0.5));
+      this.uiGroup.add(this.add.text(x, y - 24, art.name, {
+        ...FONT, fontSize: '9px', color: art.color
+      }).setOrigin(0.5));
 
-      if (card.type === 'minion') {
-        this.uiGroup.add(this.add.text(x, y + 50, `${card.atk} / ${card.hp}`, {
-          ...FONT, fontSize: '10px', color: '#ffcc44'
+      const descWords = art.description.split(' ');
+      let lines = [''];
+      descWords.forEach(w => {
+        const cur = lines[lines.length - 1];
+        if ((cur + ' ' + w).length > 22) lines.push(w);
+        else lines[lines.length - 1] = cur ? cur + ' ' + w : w;
+      });
+      lines.forEach((line, li) => {
+        this.uiGroup.add(this.add.text(x, y + 4 + li * 16, line, {
+          ...FONT, fontSize: '7px', color: '#aaa', align: 'center'
         }).setOrigin(0.5));
-      } else {
-        this.uiGroup.add(this.add.text(x, y + 50, 'SPELL', { ...FONT, fontSize: '9px', color: '#cc88ff' }).setOrigin(0.5));
-      }
-      if (card.effect) {
-        this.uiGroup.add(this.add.text(x, y + 66, card.effect.kind, { ...FONT, fontSize: '7px', color: '#88ccaa' }).setOrigin(0.5));
-      }
+      });
 
-      bg.on('pointerover', () => bg.setStrokeStyle(2, 0xaaccff));
-      bg.on('pointerout', () => bg.setStrokeStyle(2, 0x556688));
+      bg.on('pointerover', () => { bg.setFillStyle(0x2a3344); bg.setStrokeStyle(3, borderColor); });
+      bg.on('pointerout', () => { bg.setFillStyle(0x1a1a2a); bg.setStrokeStyle(2, borderColor); });
       bg.on('pointerdown', () => {
-        const col = loadCollection() || [];
-        col.push(card.id);
-        saveCollection(col);
+        const arts = loadArtifacts();
+        if (!arts.includes(artId)) {
+          arts.push(artId);
+          saveArtifacts(arts);
+        }
         this.scene.start('Hub');
       });
     });

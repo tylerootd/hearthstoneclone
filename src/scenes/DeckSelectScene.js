@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { loadDeck, loadDeckSlots } from '../data/storage.js';
+import { loadDeck, loadDeckSlots, loadArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
-import { generateEnemyDeck } from '../game/battleEngine.js';
+import { generateEnemyDeck, ARTIFACT_DEFS } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial', fontSize: '10px' };
@@ -52,6 +52,9 @@ export default class DeckSelectScene extends Phaser.Scene {
 
     // divider
     this.uiGroup.add(this.add.rectangle(W / 2, H / 2, 2, H - 120, 0x333344));
+
+    // artifacts bar
+    this.drawArtifacts();
 
     // start button
     const canStart = this.playerChoice !== null;
@@ -156,8 +159,51 @@ export default class DeckSelectScene extends Phaser.Scene {
     return `avg:${avg} M:${minions} S:${spells}`;
   }
 
+  drawArtifacts() {
+    const arts = loadArtifacts();
+    const y = H - 110;
+
+    this.uiGroup.add(this.add.text(W / 2, y - 18, 'ARTIFACTS', {
+      ...FONT, fontSize: '8px', color: '#888', letterSpacing: 2
+    }).setOrigin(0.5));
+
+    if (arts.length === 0) {
+      this.uiGroup.add(this.add.text(W / 2, y + 8, 'None yet - win battles to earn artifacts!', {
+        ...FONT, fontSize: '7px', color: '#555'
+      }).setOrigin(0.5));
+      return;
+    }
+
+    const totalW = arts.length * 160;
+    const startX = W / 2 - totalW / 2 + 80;
+
+    arts.forEach((artId, i) => {
+      const art = ARTIFACT_DEFS[artId];
+      if (!art) return;
+      const x = startX + i * 160;
+
+      const bg = this.add.rectangle(x, y + 8, 150, 30, 0x1a1a2a);
+      const borderColor = Phaser.Display.Color.HexStringToColor(art.color).color;
+      bg.setStrokeStyle(1, borderColor);
+      this.uiGroup.add(bg);
+
+      this.uiGroup.add(this.add.text(x - 60, y + 8, art.icon, {
+        fontSize: '16px'
+      }).setOrigin(0.5));
+
+      this.uiGroup.add(this.add.text(x + 4, y + 2, art.name, {
+        ...FONT, fontSize: '7px', color: art.color
+      }).setOrigin(0, 0.5));
+
+      this.uiGroup.add(this.add.text(x + 4, y + 14, art.description, {
+        ...FONT, fontSize: '5px', color: '#888'
+      }).setOrigin(0, 0.5));
+    });
+  }
+
   startBattle() {
     const playerDeck = this.decks[this.playerChoice].cards;
+    const artifacts = loadArtifacts();
 
     let enemyDeck;
     if (this.enemyChoice === null || this.enemyChoice === -1) {
@@ -166,6 +212,6 @@ export default class DeckSelectScene extends Phaser.Scene {
       enemyDeck = this.decks[this.enemyChoice].cards;
     }
 
-    this.scene.start('Battle', { playerDeck, enemyDeck });
+    this.scene.start('Battle', { playerDeck, enemyDeck, artifacts });
   }
 }

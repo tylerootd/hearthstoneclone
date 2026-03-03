@@ -3,6 +3,7 @@ const KEYS = {
   collection:   'player_collection',
   deck:         'player_deck',
   deckSlots:    'player_deck_slots',
+  artifacts:    'player_artifacts',
   gold:         'player_gold'
 };
 
@@ -20,6 +21,9 @@ export function saveDeck(deck)          { localStorage.setItem(KEYS.deck, json(d
 
 export function loadDeckSlots()         { return parse(localStorage.getItem(KEYS.deckSlots)) || []; }
 export function saveDeckSlots(slots)    { localStorage.setItem(KEYS.deckSlots, json(slots)); }
+
+export function loadArtifacts()          { return parse(localStorage.getItem(KEYS.artifacts)) || []; }
+export function saveArtifacts(arts)     { localStorage.setItem(KEYS.artifacts, json(arts)); }
 
 export function loadGold()              { const v = localStorage.getItem(KEYS.gold); return v !== null ? Number(v) : null; }
 export function saveGold(g)             { localStorage.setItem(KEYS.gold, json(g)); }
