@@ -238,12 +238,14 @@ export default class MasterModeScene extends Phaser.Scene {
     }
 
     // initialize pending sprite to current on first open
-    if (this.pendingSprite === null && currentSprite) {
-      this.pendingSprite = currentSprite;
+    if (this.pendingSprite === null) {
+      if (currentSprite) this.pendingSprite = currentSprite;
+      else if (currentSpriteData) this.pendingSprite = '__uploaded__';
     }
 
     const displaySprite = this.pendingSprite;
-    const hasChanged = displaySprite !== currentSprite;
+    const savedSprite = currentSprite || (currentSpriteData ? '__uploaded__' : null);
+    const hasChanged = displaySprite !== savedSprite;
 
     // preview row
     const previewRow = document.createElement('div');
@@ -299,7 +301,12 @@ export default class MasterModeScene extends Phaser.Scene {
       border: hasChanged ? '2px solid #e6b422' : '1px solid #444',
       display: 'flex', alignItems: 'center', justifyContent: 'center'
     });
-    if (displaySprite) {
+    if (displaySprite === '__uploaded__' && currentSpriteData) {
+      const img = document.createElement('img');
+      img.src = currentSpriteData;
+      Object.assign(img.style, { maxWidth: '60px', maxHeight: '60px', imageRendering: 'pixelated' });
+      pendingImg.appendChild(img);
+    } else if (displaySprite && displaySprite !== '__uploaded__') {
       const img = document.createElement('img');
       img.src = `./sprites/${displaySprite}`;
       Object.assign(img.style, { maxWidth: '60px', maxHeight: '60px', imageRendering: 'pixelated' });
@@ -355,6 +362,35 @@ export default class MasterModeScene extends Phaser.Scene {
     });
 
     const sprites = getSpriteList();
+    // Add uploaded image as first selectable option when card has spriteData
+    if (currentSpriteData) {
+      const isSelected = displaySprite === '__uploaded__';
+      const cell = document.createElement('div');
+      Object.assign(cell.style, {
+        background: isSelected ? '#2a3344' : '#111122',
+        border: isSelected ? '2px solid #66aaff' : '1px solid #333',
+        borderRadius: '4px', padding: '4px', cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+        transition: 'border-color 0.15s'
+      });
+      const img = document.createElement('img');
+      img.src = currentSpriteData;
+      Object.assign(img.style, {
+        width: '64px', height: '64px', objectFit: 'contain', imageRendering: 'pixelated'
+      });
+      cell.appendChild(img);
+      const label = document.createElement('div');
+      label.textContent = 'Uploaded';
+      Object.assign(label.style, { fontSize: '7px', color: isSelected ? '#66aaff' : '#888', textAlign: 'center' });
+      cell.appendChild(label);
+      cell.addEventListener('mouseenter', () => { if (!isSelected) cell.style.borderColor = '#556688'; });
+      cell.addEventListener('mouseleave', () => { if (!isSelected) cell.style.borderColor = '#333'; });
+      cell.addEventListener('click', () => {
+        this.pendingSprite = '__uploaded__';
+        this.showTab('sprite');
+      });
+      grid.appendChild(cell);
+    }
     sprites.forEach(name => {
       const isSelected = displaySprite === name;
       const isSaved = currentSprite === name;
@@ -422,7 +458,10 @@ export default class MasterModeScene extends Phaser.Scene {
     if (!card) { this.setStatus('Card not found.', '#ff4444'); return; }
 
     const updated = { ...card };
-    if (spriteName) {
+    if (spriteName === '__uploaded__') {
+      // Keep existing spriteData (already saved via upload)
+      delete updated.sprite;
+    } else if (spriteName) {
       updated.sprite = spriteName;
       delete updated.spriteData;
     } else {
@@ -487,7 +526,7 @@ export default class MasterModeScene extends Phaser.Scene {
         saveCustomCards(custom);
         rebuildPool();
 
-        this.pendingSprite = null;
+        this.pendingSprite = '__uploaded__';
 
         if (this.textarea) {
           this.textarea.value = JSON.stringify(updated, null, 2);
@@ -640,7 +679,7 @@ export default class MasterModeScene extends Phaser.Scene {
   selectCard(id) {
     this.selectedCardId = id;
     const card = getAllCards().find(c => c.id === id);
-    this.pendingSprite = card?.sprite || null;
+    this.pendingSprite = card?.sprite || (card?.spriteData ? '__uploaded__' : null);
     if (card && this.textarea) {
       this.textarea.value = JSON.stringify(card, null, 2);
     }

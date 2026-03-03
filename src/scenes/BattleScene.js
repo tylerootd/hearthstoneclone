@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { loadDeck, loadArtifacts, saveArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
 import { grantXp, loadProgression, xpToNext } from '../data/progression.js';
+import { getCardTextureKey } from '../utils/cardSprite.js';
 import {
   createBattleState, startTurn, endTurnTriggers, canPlayCard, playCard,
   minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck,
@@ -11,11 +12,6 @@ import {
 const W = 1024, H = 768;
 const CARD_W = 82, CARD_H = 116;
 const MINION_S = 74;
-
-function spriteKey(card) {
-  if (!card.sprite) return null;
-  return 'sprite_' + card.sprite.replace('.png', '');
-}
 
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial', fontSize: '10px' };
 
@@ -42,6 +38,21 @@ export default class BattleScene extends Phaser.Scene {
     this.uiGroup.clear(true, true);
     const s = this.bs;
 
+    // artifact (top-left: logo + text)
+    if (this.playerArtifacts && this.playerArtifacts.length > 0) {
+      const def = ARTIFACT_DEFS[this.playerArtifacts[0]];
+      if (def) {
+        const artBg = this.add.rectangle(12, 12, 160, 44, 0x1a2233, 0.95).setStrokeStyle(2, 0x556677);
+        this.uiGroup.add(artBg);
+        this.uiGroup.add(this.add.text(34, 22, def.icon, {
+          fontSize: '22px', color: def.color
+        }).setOrigin(0.5));
+        this.uiGroup.add(this.add.text(68, 22, def.name, {
+          ...FONT, fontSize: '8px', color: '#e6b422'
+        }).setOrigin(0, 0.5));
+      }
+    }
+
     this.drawHero(512, 52, s.enemy, 'Enemy', true);
     this.drawBoard(s.enemy.board, 185, false);
 
@@ -53,14 +64,6 @@ export default class BattleScene extends Phaser.Scene {
     this.uiGroup.add(this.add.text(850, 570, `MANA ${s.player.mana}/${s.player.maxMana}`, {
       ...FONT, fontSize: '14px', color: '#66aaff'
     }));
-
-    if (this.playerArtifacts.length > 0) {
-      const artStr = this.playerArtifacts.map(id => {
-        const a = ARTIFACT_DEFS[id];
-        return a ? a.icon : '';
-      }).join(' ');
-      this.uiGroup.add(this.add.text(850, 596, artStr, { fontSize: '14px' }));
-    }
 
     this.drawHand();
 
@@ -106,14 +109,14 @@ export default class BattleScene extends Phaser.Scene {
       const y = yBase;
 
       const card = getCardById(m.id);
-      const key = card ? spriteKey(card) : null;
+      const key = card ? getCardTextureKey(this, card) : null;
 
       const border = isPlayer ? 0x336644 : 0x663344;
       const bg = this.add.rectangle(x, y, MINION_S, MINION_S, 0x111111).setInteractive({ useHandCursor: true });
       bg.setStrokeStyle(2, border);
       this.uiGroup.add(bg);
 
-      if (key && this.textures.exists(key)) {
+      if (key) {
         const img = this.add.image(x, y - 4, key).setDisplaySize(MINION_S - 8, MINION_S - 8);
         this.uiGroup.add(img);
       }
@@ -167,8 +170,8 @@ export default class BattleScene extends Phaser.Scene {
       bg.setStrokeStyle(2, playable ? 0x66aaff : 0x333344);
       this.uiGroup.add(bg);
 
-      const key = spriteKey(card);
-      if (key && this.textures.exists(key)) {
+      const key = getCardTextureKey(this, card);
+      if (key) {
         const img = this.add.image(x, y - 6, key).setDisplaySize(CARD_W - 10, 62);
         img.setCrop(0, 0, img.width, img.height * 0.7);
         this.uiGroup.add(img);

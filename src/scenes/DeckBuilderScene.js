@@ -1,16 +1,12 @@
 import Phaser from 'phaser';
 import { loadCollection, saveCollection, loadDeck, saveDeck, loadCustomCards, loadDeckSlots, saveDeckSlots } from '../data/storage.js';
 import { getCardById, getAllCards, getBaseCards } from '../data/cardPool.js';
+import { getCardTextureKey } from '../utils/cardSprite.js';
 
 const W = 1024, H = 768;
 const COLS = 5;
 const CARD_W = 120, CARD_H = 90, GAP = 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial', fontSize: '10px' };
-
-function spriteKey(card) {
-  if (!card.sprite) return null;
-  return 'sprite_' + card.sprite.replace('.png', '');
-}
 
 export default class DeckBuilderScene extends Phaser.Scene {
   constructor() { super('DeckBuilder'); }
@@ -69,8 +65,8 @@ export default class DeckBuilderScene extends Phaser.Scene {
       bg.setStrokeStyle(1, 0x445566);
       this.uiGroup.add(bg);
 
-      const key = spriteKey(card);
-      if (key && this.textures.exists(key)) {
+      const key = getCardTextureKey(this, card);
+      if (key) {
         const img = this.add.image(x - 24, y, key).setDisplaySize(40, 50);
         this.uiGroup.add(img);
       }
@@ -152,8 +148,8 @@ export default class DeckBuilderScene extends Phaser.Scene {
       const rowBg = this.add.rectangle(870, y, 260, 20, 0x1a1a2a).setInteractive({ useHandCursor: true });
       this.uiGroup.add(rowBg);
 
-      const key = spriteKey(card);
-      if (key && this.textures.exists(key)) {
+      const key = getCardTextureKey(this, card);
+      if (key) {
         this.uiGroup.add(this.add.image(755, y, key).setDisplaySize(18, 18));
       }
 

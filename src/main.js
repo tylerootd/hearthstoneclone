@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import BootScene from './scenes/BootScene.js';
+import ArtifactPickScene from './scenes/ArtifactPickScene.js';
 import HubScene from './scenes/HubScene.js';
 import OverworldScene from './scenes/OverworldScene.js';
 import DeckSelectScene from './scenes/DeckSelectScene.js';
@@ -19,7 +20,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene]
+  scene: [BootScene, ArtifactPickScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene]
 };
 
 new Phaser.Game(config);

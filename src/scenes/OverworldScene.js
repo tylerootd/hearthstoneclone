@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { getNpcList, getCardById } from '../data/cardPool.js';
+import { getCardTextureKey } from '../utils/cardSprite.js';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
 import { loadProgression, xpToNext } from '../data/progression.js';
 import { getNpcDeck } from '../data/npcDecks.js';
-import { generateEnemyDeck } from '../game/battleEngine.js';
+import { generateEnemyDeck, ARTIFACT_DEFS } from '../game/battleEngine.js';
 import { addResource, loadResources, RES, RES_META } from '../data/resources.js';
 
 const TILE = 16;
@@ -101,11 +102,11 @@ function defineResourceNodes() {
 
 function defineBuildings() {
   return [
-    { x: 32, y: 23, w: 5, h: 5, label: 'Inn',        col: 0x7a5030, npcIdx: 0 },
-    { x: 43, y: 23, w: 5, h: 5, label: 'Arena',      col: 0x506080, npcIdx: 1 },
-    { x: 32, y: 31, w: 5, h: 5, label: 'Shop',       col: 0x508050, npcIdx: 3 },
-    { x: 43, y: 31, w: 5, h: 5, label: 'Forge',      col: 0x805050, npcIdx: 4 },
-    { x: 37, y: 17, w: 6, h: 5, label: 'Guild Hall', col: 0x606080, npcIdx: 2 }
+    { x: 32, y: 23, w: 5, h: 5, label: 'LEVEL 1',        col: 0x7a5030, npcIdx: 0 },
+    { x: 43, y: 23, w: 5, h: 5, label: 'Level 2',      col: 0x506080, npcIdx: 1 },
+    { x: 32, y: 31, w: 5, h: 5, label: 'Level 3',       col: 0x508050, npcIdx: 3 },
+    { x: 43, y: 31, w: 5, h: 5, label: 'Level 4',      col: 0x805050, npcIdx: 4 },
+    { x: 37, y: 17, w: 6, h: 5, label: 'Level 5 BOSS', col: 0x606080, npcIdx: 2 }
   ];
 }
 
@@ -356,9 +357,9 @@ export default class OverworldScene extends Phaser.Scene {
         visual = this.add.sprite(x, y, skinKey, 0).setDepth(8);
       } else {
         const card = getCardById(npc.portraitCard);
-        const spriteKey = card?.sprite ? 'sprite_' + card.sprite.replace('.png', '') : null;
-        if (spriteKey && this.textures.exists(spriteKey)) {
-          visual = this.add.image(x, y, spriteKey).setDisplaySize(14, 14).setDepth(8);
+        const key = card ? getCardTextureKey(this, card) : null;
+        if (key) {
+          visual = this.add.image(x, y, key).setDisplaySize(14, 14).setDepth(8);
         } else {
           visual = this.add.rectangle(x, y, 12, 14, 0xcc6644).setDepth(8);
         }
@@ -436,6 +437,23 @@ export default class OverworldScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(51);
       rx += 40;
     });
+
+    // artifact (top-left: logo + text, below HUD bar)
+    const arts = loadArtifacts();
+    if (arts && arts.length > 0) {
+      const def = ARTIFACT_DEFS[arts[0]];
+      if (def) {
+        const bw = 90, bh = 28;
+        this.add.rectangle(4, 18, bw, bh, 0x1a2233, 0.95)
+          .setOrigin(0, 0).setScrollFactor(0).setDepth(51).setStrokeStyle(1, 0x556677);
+        this.add.text(22, 32, def.icon, {
+          fontSize: '12px', color: def.color
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+        this.add.text(42, 32, def.name, {
+          ...FONT, fontSize: '5px', color: '#e6b422'
+        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
+      }
+    }
 
     // buttons + hint (using DOM for reliable display at any zoom)
     this.createButtons();

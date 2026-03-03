@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { initCardPool, getStarterCollection, getStarterDeck, getAllCards, getSpriteList } from '../data/cardPool.js';
-import { loadCollection, saveCollection, loadDeck, saveDeck, loadGold, saveGold } from '../data/storage.js';
+import { loadCollection, saveCollection, loadDeck, saveDeck, loadGold, saveGold, loadArtifacts } from '../data/storage.js';
 import { setBattleCardPoolRef } from '../game/battleEngine.js';
 
 export default class BootScene extends Phaser.Scene {
@@ -32,7 +32,8 @@ export default class BootScene extends Phaser.Scene {
     this.load.image('ninja_heart', './ninja/heart.png');
 
     this.load.once('complete', () => {
-      this.scene.start('Hub');
+      const arts = loadArtifacts();
+      this.scene.start(arts && arts.length > 0 ? 'Hub' : 'ArtifactPick');
     });
 
     loadTxt.setText('Loading sprites...');
