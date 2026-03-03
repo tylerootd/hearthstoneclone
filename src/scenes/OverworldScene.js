@@ -437,7 +437,7 @@ export default class OverworldScene extends Phaser.Scene {
       rx += 40;
     });
 
-    // bottom bar with buttons (using DOM for reliable clicks at any zoom)
+    // buttons + hint (using DOM for reliable display at any zoom)
     this.createButtons();
 
     // interaction prompt (hidden initially)
@@ -609,8 +609,12 @@ export default class OverworldScene extends Phaser.Scene {
     const bar = document.createElement('div');
     Object.assign(bar.style, {
       position: 'fixed', top: '8px', left: '8px', zIndex: '999',
-      display: 'flex', gap: '6px'
+      display: 'flex', flexDirection: 'column', gap: '6px'
     });
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.gap = '6px';
 
     const makeBtn = (text, bg, fn) => {
       const b = document.createElement('button');
@@ -621,7 +625,7 @@ export default class OverworldScene extends Phaser.Scene {
         cursor: 'pointer', borderRadius: '3px'
       });
       b.addEventListener('click', fn);
-      bar.appendChild(b);
+      btnRow.appendChild(b);
       return b;
     };
 
@@ -633,6 +637,15 @@ export default class OverworldScene extends Phaser.Scene {
         returnPlayerY: this.player.y
       });
     });
+
+    bar.appendChild(btnRow);
+
+    const hint = document.createElement('div');
+    hint.textContent = 'E to interact with NPCs or collect materials';
+    Object.assign(hint.style, {
+      color: '#aaa', fontSize: '10px', fontFamily: '"Press Start 2P", monospace'
+    });
+    bar.appendChild(hint);
 
     document.body.appendChild(bar);
     this.btnBar = bar;
