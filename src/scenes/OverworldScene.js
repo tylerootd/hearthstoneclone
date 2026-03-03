@@ -393,7 +393,8 @@ export default class OverworldScene extends Phaser.Scene {
     };
     this.keyE = this.input.keyboard.addKey('E');
     this.keyEDown = false;
-    this.input.keyboard.addKey('ESC').on('down', () => this.scene.start('Hub'));
+    this.confirmingExit = false;
+    this.input.keyboard.addKey('ESC').on('down', () => this.showExitConfirm());
   }
 
   drawHud() {
@@ -434,20 +435,20 @@ export default class OverworldScene extends Phaser.Scene {
       rx += 40;
     });
 
-    // home button
-    const homeBtn = this.add.rectangle(sw - 24, 7, 40, 10, 0x334455, 0.8)
-      .setScrollFactor(0).setDepth(51).setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, 0x5577aa);
-    this.add.text(sw - 24, 7, 'HOME', {
-      ...FONT, fontSize: '4px', color: '#aaccee'
+    // ESC button (top-left, after HUD bar)
+    const escBtn = this.add.rectangle(4, 18, 30, 10, 0x443333, 0.8)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(51)
+      .setInteractive({ useHandCursor: true }).setStrokeStyle(1, 0xaa5555);
+    this.add.text(19, 23, 'ESC', {
+      ...FONT, fontSize: '4px', color: '#ff8888'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    homeBtn.on('pointerdown', () => this.scene.start('Hub'));
+    escBtn.on('pointerdown', () => this.showExitConfirm());
 
     // craft button
-    const craftBtn = this.add.rectangle(sw - 70, 7, 40, 10, 0x334433, 0.8)
-      .setScrollFactor(0).setDepth(51).setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, 0x44aa44);
-    this.add.text(sw - 70, 7, 'CRAFT', {
+    const craftBtn = this.add.rectangle(40, 18, 36, 10, 0x334433, 0.8)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(51)
+      .setInteractive({ useHandCursor: true }).setStrokeStyle(1, 0x44aa44);
+    this.add.text(58, 23, 'CRAFT', {
       ...FONT, fontSize: '4px', color: '#88cc88'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
     craftBtn.on('pointerdown', () => {
@@ -482,6 +483,8 @@ export default class OverworldScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.confirmingExit) return;
+
     // movement
     const body = this.player.body;
     let vx = 0, vy = 0;
@@ -613,6 +616,62 @@ export default class OverworldScene extends Phaser.Scene {
       npcId: npc.id, npcName: npc.name, xpReward: npc.xpReward || 20,
       returnTo: 'Overworld',
       playerX: this.player.x, playerY: this.player.y
+    });
+  }
+
+  showExitConfirm() {
+    if (this.confirmingExit) return;
+    this.confirmingExit = true;
+    this.player.body.setVelocity(0, 0);
+
+    const cam = this.cameras.main;
+    const sw = cam.width / ZOOM;
+    const sh = cam.height / ZOOM;
+    const cx = sw / 2, cy = sh / 2;
+
+    const grp = this.add.group();
+
+    const overlay = this.add.rectangle(cx, cy, sw, sh, 0x000000, 0.6)
+      .setScrollFactor(0).setDepth(200);
+    grp.add(overlay);
+
+    const box = this.add.rectangle(cx, cy, 140, 60, 0x1a1a2e, 0.95)
+      .setScrollFactor(0).setDepth(201).setStrokeStyle(2, 0x5577aa);
+    grp.add(box);
+
+    const title = this.add.text(cx, cy - 18, 'Return to Hub?', {
+      ...FONT, fontSize: '6px', color: '#ffffff'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(202);
+    grp.add(title);
+
+    const sub = this.add.text(cx, cy - 8, 'Progress is saved automatically', {
+      ...FONT, fontSize: '3px', color: '#888888'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(202);
+    grp.add(sub);
+
+    // YES button
+    const yesBtn = this.add.rectangle(cx - 30, cy + 14, 44, 16, 0x225522)
+      .setScrollFactor(0).setDepth(202).setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x44aa44);
+    grp.add(yesBtn);
+    const yesTxt = this.add.text(cx - 30, cy + 14, 'YES', {
+      ...FONT, fontSize: '5px', color: '#44ff44'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(203);
+    grp.add(yesTxt);
+    yesBtn.on('pointerdown', () => this.scene.start('Hub'));
+
+    // NO button
+    const noBtn = this.add.rectangle(cx + 30, cy + 14, 44, 16, 0x552222)
+      .setScrollFactor(0).setDepth(202).setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0xaa4444);
+    grp.add(noBtn);
+    const noTxt = this.add.text(cx + 30, cy + 14, 'NO', {
+      ...FONT, fontSize: '5px', color: '#ff4444'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(203);
+    grp.add(noTxt);
+    noBtn.on('pointerdown', () => {
+      grp.clear(true, true);
+      this.confirmingExit = false;
     });
   }
 
