@@ -1,0 +1,311 @@
+import { getCardById } from '../data/cardPool.js';
+
+const MAX_HAND = 10;
+const MAX_BOARD = 7;
+const MAX_MANA = 10;
+const STARTING_HP = 30;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function makeMinion(card) {
+  return {
+    uid: crypto.randomUUID(),
+    id: card.id,
+    name: card.name,
+    cost: card.cost,
+    atk: card.atk,
+    hp: card.hp,
+    maxHp: card.hp,
+    effect: card.effect || null,
+    triggers: card.triggers || [],
+    canAttack: false
+  };
+}
+
+export function createBattleState(playerDeckIds, enemyDeckIds) {
+  const playerDeck = shuffle(playerDeckIds.map(id => getCardById(id)).filter(Boolean));
+  const enemyDeck  = shuffle(enemyDeckIds.map(id => getCardById(id)).filter(Boolean));
+
+  const state = {
+    player: {
+      hp: STARTING_HP, maxHp: STARTING_HP,
+      mana: 0, maxMana: 0,
+      deck: playerDeck, hand: [], board: [],
+      fatigue: 0
+    },
+    enemy: {
+      hp: STARTING_HP, maxHp: STARTING_HP,
+      mana: 0, maxMana: 0,
+      deck: enemyDeck, hand: [], board: [],
+      fatigue: 0
+    },
+    turn: 0,
+    currentTurn: 'player',
+    phase: 'playing',
+    winner: null,
+    log: []
+  };
+
+  for (let i = 0; i < 3; i++) drawCard(state, 'player');
+  for (let i = 0; i < 4; i++) drawCard(state, 'enemy');
+
+  return state;
+}
+
+export function drawCard(state, who) {
+  const side = state[who];
+  if (side.deck.length === 0) {
+    side.fatigue++;
+    side.hp -= side.fatigue;
+    state.log.push(`${who} takes ${side.fatigue} fatigue damage!`);
+    checkWin(state);
+    return null;
+  }
+  if (side.hand.length >= MAX_HAND) {
+    const burned = side.deck.shift();
+    state.log.push(`${who}'s hand is full — ${burned.name} burned!`);
+    return null;
+  }
+  const card = side.deck.shift();
+  side.hand.push(card);
+  return card;
+}
+
+export function startTurn(state, who) {
+  const side = state[who];
+  state.currentTurn = who;
+  state.turn++;
+
+  if (side.maxMana < MAX_MANA) side.maxMana++;
+  side.mana = side.maxMana;
+
+  side.board.forEach(m => { m.canAttack = true; });
+
+  drawCard(state, who);
+  processTriggers(state, who, 'turn_start');
+}
+
+export function endTurnTriggers(state, who) {
+  processTriggers(state, who, 'turn_end');
+}
+
+function processTriggers(state, who, timing) {
+  const side = state[who];
+  for (const minion of [...side.board]) {
+    if (state.phase === 'over') return;
+    for (const trigger of minion.triggers) {
+      if (trigger.when !== timing) continue;
+      state.log.push(`  ${minion.name} triggers: ${trigger.effect.kind}`);
+      applyEffect(state, who, trigger.effect, null, minion);
+      checkWin(state);
+    }
+  }
+}
+
+export function canPlayCard(state, who, handIndex) {
+  const side = state[who];
+  const card = side.hand[handIndex];
+  if (!card) return false;
+  if (card.cost > side.mana) return false;
+  if (card.type === 'minion' && side.board.length >= MAX_BOARD) return false;
+  return true;
+}
+
+export function playCard(state, who, handIndex, targetInfo) {
+  const side = state[who];
+  const opp  = who === 'player' ? state.enemy : state.player;
+  const card = side.hand[handIndex];
+  if (!card) return false;
+  if (card.cost > side.mana) return false;
+
+  side.mana -= card.cost;
+  side.hand.splice(handIndex, 1);
+  state.log.push(`${who} plays ${card.name} (${card.cost} mana)`);
+
+  if (card.type === 'minion') {
+    if (side.board.length >= MAX_BOARD) return false;
+    const minion = makeMinion(card);
+    side.board.push(minion);
+    if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
+  } else if (card.type === 'spell') {
+    if (card.effect) applyEffect(state, who, card.effect, targetInfo, null);
+  }
+
+  checkWin(state);
+  return true;
+}
+
+function applyEffect(state, who, effect, targetInfo, sourceMinion) {
+  const side = state[who];
+  const opp  = who === 'player' ? state.enemy : state.player;
+
+  switch (effect.kind) {
+    case 'dealDamage': {
+      const val = effect.value;
+      if (effect.target === 'friendly_hero') {
+        side.hp -= val;
+        state.log.push(`  Deals ${val} damage to own hero`);
+      } else if (effect.target === 'enemy_hero') {
+        opp.hp -= val;
+        state.log.push(`  Deals ${val} damage to enemy hero`);
+      } else if (effect.target === 'enemy_any') {
+        if (targetInfo && targetInfo.type === 'minion') {
+          const m = opp.board.find(m => m.uid === targetInfo.uid);
+          if (m) { m.hp -= val; state.log.push(`  Deals ${val} damage to ${m.name}`); }
+        } else {
+          opp.hp -= val;
+          state.log.push(`  Deals ${val} damage to enemy hero`);
+        }
+      }
+      cleanDead(state);
+      break;
+    }
+    case 'heal': {
+      const val = effect.value;
+      if (effect.target === 'friendly_hero') {
+        side.hp = Math.min(side.hp + val, side.maxHp);
+        state.log.push(`  Heals hero for ${val}`);
+      } else if (effect.target === 'friendly_minion' && targetInfo && targetInfo.type === 'minion') {
+        const m = side.board.find(m => m.uid === targetInfo.uid);
+        if (m) { m.hp = Math.min(m.hp + val, m.maxHp); state.log.push(`  Heals ${m.name} for ${val}`); }
+      }
+      break;
+    }
+    case 'draw': {
+      for (let i = 0; i < effect.value; i++) drawCard(state, who);
+      state.log.push(`  Draws ${effect.value} card(s)`);
+      break;
+    }
+    case 'buff': {
+      const { atk, hp } = effect.value;
+      if (effect.target === 'friendly_minion' && targetInfo && targetInfo.type === 'minion') {
+        const m = side.board.find(m => m.uid === targetInfo.uid);
+        if (m) {
+          m.atk += atk;
+          m.hp += hp;
+          m.maxHp += hp;
+          state.log.push(`  Buffs ${m.name} +${atk}/+${hp}`);
+        }
+      }
+      break;
+    }
+  }
+}
+
+export function minionAttack(state, who, attackerUid, targetInfo) {
+  const side = state[who];
+  const opp  = who === 'player' ? state.enemy : state.player;
+  const attacker = side.board.find(m => m.uid === attackerUid);
+  if (!attacker || !attacker.canAttack) return false;
+
+  if (targetInfo.type === 'hero') {
+    opp.hp -= attacker.atk;
+    state.log.push(`${attacker.name} attacks enemy hero for ${attacker.atk}`);
+  } else if (targetInfo.type === 'minion') {
+    const defender = opp.board.find(m => m.uid === targetInfo.uid);
+    if (!defender) return false;
+    defender.hp -= attacker.atk;
+    attacker.hp -= defender.atk;
+    state.log.push(`${attacker.name} (${attacker.atk}/${attacker.hp}) attacks ${defender.name} (${defender.atk}/${defender.hp})`);
+    cleanDead(state);
+  }
+
+  attacker.canAttack = false;
+  checkWin(state);
+  return true;
+}
+
+function cleanDead(state) {
+  ['player', 'enemy'].forEach(who => {
+    state[who].board = state[who].board.filter(m => {
+      if (m.hp <= 0) { state.log.push(`  ${m.name} dies`); return false; }
+      return true;
+    });
+  });
+}
+
+function checkWin(state) {
+  if (state.player.hp <= 0 && state.enemy.hp <= 0) {
+    state.phase = 'over'; state.winner = 'draw';
+  } else if (state.enemy.hp <= 0) {
+    state.phase = 'over'; state.winner = 'player';
+  } else if (state.player.hp <= 0) {
+    state.phase = 'over'; state.winner = 'enemy';
+  }
+}
+
+export function needsTarget(card) {
+  if (!card.effect) return false;
+  const t = card.effect.target;
+  return t === 'enemy_any' || t === 'friendly_minion';
+}
+
+export function runEnemyTurn(state) {
+  const enemy = state.enemy;
+  const player = state.player;
+
+  for (let safe = 0; safe < 30; safe++) {
+    const playable = enemy.hand
+      .map((c, i) => ({ card: c, idx: i }))
+      .filter(({ card }) => card.cost <= enemy.mana && (card.type !== 'minion' || enemy.board.length < MAX_BOARD));
+
+    if (playable.length === 0) break;
+
+    const { card, idx } = playable[Math.floor(Math.random() * playable.length)];
+    let targetInfo = null;
+
+    if (card.effect) {
+      const t = card.effect.target;
+      if (t === 'enemy_any') {
+        if (player.board.length > 0 && Math.random() < 0.6) {
+          const m = player.board[Math.floor(Math.random() * player.board.length)];
+          targetInfo = { type: 'minion', uid: m.uid };
+        } else {
+          targetInfo = { type: 'hero' };
+        }
+      } else if (t === 'friendly_minion' && enemy.board.length > 0) {
+        const m = enemy.board[Math.floor(Math.random() * enemy.board.length)];
+        targetInfo = { type: 'minion', uid: m.uid };
+      }
+    }
+
+    playCard(state, 'enemy', idx, targetInfo);
+    if (state.phase === 'over') return;
+  }
+
+  const attackers = enemy.board.filter(m => m.canAttack && m.atk > 0);
+  for (const attacker of attackers) {
+    if (state.phase === 'over') return;
+
+    if (player.board.length > 0 && Math.random() < 0.5) {
+      const target = player.board[Math.floor(Math.random() * player.board.length)];
+      minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: target.uid });
+    } else {
+      minionAttack(state, 'enemy', attacker.uid, { type: 'hero' });
+    }
+  }
+}
+
+export function generateEnemyDeck() {
+  const { getAllCards } = require_getAllCards();
+  const pool = getAllCards().filter(c => c.type === 'minion' || c.type === 'spell');
+  const deck = [];
+  for (let i = 0; i < 30; i++) {
+    deck.push(pool[Math.floor(Math.random() * pool.length)].id);
+  }
+  return deck;
+}
+
+function require_getAllCards() {
+  return { getAllCards: _getAllCardsRef };
+}
+
+let _getAllCardsRef = () => [];
+export function setBattleCardPoolRef(fn) { _getAllCardsRef = fn; }
