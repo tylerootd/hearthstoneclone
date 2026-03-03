@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts, saveArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
+import { grantXp, loadProgression, xpToNext } from '../data/progression.js';
 import {
   createBattleState, startTurn, endTurnTriggers, canPlayCard, playCard,
   minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck,
@@ -24,11 +25,13 @@ export default class BattleScene extends Phaser.Scene {
   create(data) {
     this.selecting = null;
     this.targetMode = false;
+    this.battleData = data || {};
 
-    const playerDeck = (data && data.playerDeck) || loadDeck() || [];
-    const enemyDeck = (data && data.enemyDeck) || generateEnemyDeck();
-    this.playerArtifacts = (data && data.artifacts) || loadArtifacts();
-    this.bs = createBattleState(playerDeck, enemyDeck, this.playerArtifacts);
+    const playerDeck = this.battleData.playerDeck || loadDeck() || [];
+    const enemyDeck = this.battleData.enemyDeck || generateEnemyDeck();
+    this.playerArtifacts = this.battleData.artifacts || loadArtifacts();
+    const plvl = loadProgression().level;
+    this.bs = createBattleState(playerDeck, enemyDeck, this.playerArtifacts, plvl);
     startTurn(this.bs, 'player');
 
     this.uiGroup = this.add.group();
@@ -212,6 +215,14 @@ export default class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5));
       }
 
+      const lvlLocked = card.requiredLevel && card.requiredLevel > this.bs.playerLevel;
+      if (lvlLocked) {
+        this.uiGroup.add(this.add.rectangle(x, y, CARD_W, CARD_H, 0x000000, 0.5));
+        this.uiGroup.add(this.add.text(x, y - 4, `Lv${card.requiredLevel}`, {
+          ...FONT, fontSize: '8px', color: '#ff4444', stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5));
+      }
+
       if (playable && !this.targetMode && this.bs.phase === 'playing' && this.bs.currentTurn === 'player') {
         bg.on('pointerdown', () => {
           if (needsTarget(card)) {
@@ -279,22 +290,45 @@ export default class BattleScene extends Phaser.Scene {
 
     const won = this.bs.winner === 'player';
     const msg = won ? 'VICTORY' : (this.bs.winner === 'draw' ? 'DRAW' : 'DEFEAT');
-    this.uiGroup.add(this.add.text(512, 220, msg, {
+    this.uiGroup.add(this.add.text(512, 180, msg, {
       ...FONT, fontSize: '36px', color: won ? '#44ff44' : '#ff4444'
     }).setOrigin(0.5));
 
+    const returnTo = this.battleData.returnTo || 'Hub';
+    const returnData = { playerX: this.battleData.playerX, playerY: this.battleData.playerY };
+
+    if (won && this.battleData.xpReward) {
+      const xpAmt = this.battleData.xpReward;
+      const result = grantXp(xpAmt);
+      const npcName = this.battleData.npcName || 'Enemy';
+
+      this.uiGroup.add(this.add.text(512, 225, `Defeated ${npcName}!`, {
+        ...FONT, fontSize: '12px', color: '#e6b422'
+      }).setOrigin(0.5));
+      this.uiGroup.add(this.add.text(512, 250, `+${xpAmt} XP`, {
+        ...FONT, fontSize: '14px', color: '#44aaff'
+      }).setOrigin(0.5));
+
+      if (result.leveled) {
+        this.uiGroup.add(this.add.text(512, 275, `LEVEL UP! Now Level ${result.level}`, {
+          ...FONT, fontSize: '12px', color: '#ffcc00'
+        }).setOrigin(0.5));
+      }
+    }
+
     if (won) {
-      this.showRewardPick();
+      this.showRewardPick(returnTo, returnData);
     } else {
-      const btn = this.add.rectangle(512, 420, 200, 44, 0x334455).setInteractive({ useHandCursor: true });
+      const btnLabel = returnTo === 'Overworld' ? 'RETURN TO MAP' : 'RETURN TO HUB';
+      const btn = this.add.rectangle(512, 420, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
       btn.setStrokeStyle(2, 0x5577aa);
       this.uiGroup.add(btn);
-      this.uiGroup.add(this.add.text(512, 420, 'RETURN TO HUB', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
-      btn.on('pointerdown', () => this.scene.start('Hub'));
+      this.uiGroup.add(this.add.text(512, 420, btnLabel, { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+      btn.on('pointerdown', () => this.scene.start(returnTo, returnData));
     }
   }
 
-  showRewardPick() {
+  showRewardPick(returnTo = 'Hub', returnData = {}) {
     const owned = new Set(loadArtifacts());
     const available = ALL_ARTIFACT_IDS.filter(id => !owned.has(id));
 
@@ -303,11 +337,12 @@ export default class BattleScene extends Phaser.Scene {
         ...FONT, fontSize: '14px', color: '#e6b422'
       }).setOrigin(0.5));
 
-      const btn = this.add.rectangle(512, 450, 200, 44, 0x334455).setInteractive({ useHandCursor: true });
+      const btnLabel = returnTo === 'Overworld' ? 'RETURN TO MAP' : 'RETURN TO HUB';
+      const btn = this.add.rectangle(512, 450, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
       btn.setStrokeStyle(2, 0x5577aa);
       this.uiGroup.add(btn);
-      this.uiGroup.add(this.add.text(512, 450, 'RETURN TO HUB', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
-      btn.on('pointerdown', () => this.scene.start('Hub'));
+      this.uiGroup.add(this.add.text(512, 450, btnLabel, { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+      btn.on('pointerdown', () => this.scene.start(returnTo, returnData));
       return;
     }
 
@@ -358,7 +393,7 @@ export default class BattleScene extends Phaser.Scene {
           arts.push(artId);
           saveArtifacts(arts);
         }
-        this.scene.start('Hub');
+        this.scene.start(returnTo, returnData);
       });
     });
   }

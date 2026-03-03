@@ -30,4 +30,7 @@ export function saveGold(g)             { localStorage.setItem(KEYS.gold, json(g
 
 export function resetSave() {
   Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+  localStorage.removeItem('player_level');
+  localStorage.removeItem('player_xp');
+  localStorage.removeItem('npc_deck_overrides');
 }

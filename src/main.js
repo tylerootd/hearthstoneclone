@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import BootScene from './scenes/BootScene.js';
 import HubScene from './scenes/HubScene.js';
+import OverworldScene from './scenes/OverworldScene.js';
 import DeckSelectScene from './scenes/DeckSelectScene.js';
 import BattleScene from './scenes/BattleScene.js';
 import DeckBuilderScene from './scenes/DeckBuilderScene.js';
@@ -12,7 +13,11 @@ const config = {
   height: 768,
   parent: document.body,
   backgroundColor: '#1a1a2e',
-  scene: [BootScene, HubScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene]
+  physics: {
+    default: 'arcade',
+    arcade: { debug: false }
+  },
+  scene: [BootScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene]
 };
 
 new Phaser.Game(config);

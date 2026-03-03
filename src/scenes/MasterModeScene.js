@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { loadCustomCards, saveCustomCards, loadCollection, saveCollection } from '../data/storage.js';
-import { getAllCards, getBaseCards, rebuildPool, getSpriteList } from '../data/cardPool.js';
+import { loadCustomCards, saveCustomCards, loadCollection, saveCollection, loadDeck } from '../data/storage.js';
+import { getAllCards, getBaseCards, rebuildPool, getSpriteList, getNpcList } from '../data/cardPool.js';
+import { loadNpcDeckOverrides, saveNpcDeckOverride, removeNpcDeckOverride } from '../data/npcDecks.js';
 
 const W = 1024, H = 768;
 const VALID_TYPES = ['minion', 'spell'];
@@ -86,6 +87,7 @@ export default class MasterModeScene extends Phaser.Scene {
 
     this.jsonTabBtn = this.makeTabBtn('JSON Editor', 'json', tabBar);
     this.spriteTabBtn = this.makeTabBtn('Sprite Picker', 'sprite', tabBar);
+    this.npcTabBtn = this.makeTabBtn('NPC Decks', 'npc', tabBar);
     center.appendChild(tabBar);
 
     // tab content
@@ -168,17 +170,21 @@ export default class MasterModeScene extends Phaser.Scene {
     this.activeTab = tabId;
     this.tabContent.innerHTML = '';
 
-    [this.jsonTabBtn, this.spriteTabBtn].forEach(btn => {
+    [this.jsonTabBtn, this.spriteTabBtn, this.npcTabBtn].forEach(btn => {
       btn.style.color = '#666';
       btn.style.borderBottom = '2px solid transparent';
     });
 
-    const activeBtn = tabId === 'json' ? this.jsonTabBtn : this.spriteTabBtn;
-    activeBtn.style.color = '#e6b422';
-    activeBtn.style.borderBottom = '2px solid #e6b422';
+    const btnMap = { json: this.jsonTabBtn, sprite: this.spriteTabBtn, npc: this.npcTabBtn };
+    const activeBtn = btnMap[tabId];
+    if (activeBtn) {
+      activeBtn.style.color = '#e6b422';
+      activeBtn.style.borderBottom = '2px solid #e6b422';
+    }
 
     if (tabId === 'json') this.buildJsonTab();
-    else this.buildSpriteTab();
+    else if (tabId === 'sprite') this.buildSpriteTab();
+    else if (tabId === 'npc') this.buildNpcTab();
   }
 
   buildJsonTab() {
@@ -496,6 +502,78 @@ export default class MasterModeScene extends Phaser.Scene {
     input.click();
   }
 
+  buildNpcTab() {
+    const container = document.createElement('div');
+    Object.assign(container.style, {
+      flex: '1', overflowY: 'auto', padding: '10px',
+      display: 'flex', flexDirection: 'column', gap: '8px'
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Assign decks to NPCs for overworld battles';
+    Object.assign(title.style, { color: '#888', fontSize: '9px', marginBottom: '8px' });
+    container.appendChild(title);
+
+    const npcs = getNpcList();
+    const overrides = loadNpcDeckOverrides();
+
+    npcs.forEach(npc => {
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', gap: '10px', padding: '8px',
+        background: '#14142a', borderRadius: '4px', border: '1px solid #333'
+      });
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      const nameEl = document.createElement('div');
+      nameEl.textContent = `${npc.name} (Lv${npc.level})`;
+      Object.assign(nameEl.style, { color: '#e6b422', fontSize: '10px', marginBottom: '4px' });
+      info.appendChild(nameEl);
+
+      const hasDeck = overrides[npc.id] && overrides[npc.id].length > 0;
+      const deckInfo = document.createElement('div');
+      deckInfo.textContent = hasDeck ? `Custom deck: ${overrides[npc.id].length} cards` : 'Using random deck';
+      Object.assign(deckInfo.style, { color: hasDeck ? '#88ff88' : '#666', fontSize: '8px' });
+      info.appendChild(deckInfo);
+      row.appendChild(info);
+
+      const assignBtn = document.createElement('button');
+      assignBtn.textContent = 'Assign My Deck';
+      Object.assign(assignBtn.style, {
+        background: '#224422', color: '#88ff88', border: '1px solid #44aa44',
+        padding: '4px 8px', fontSize: '8px', fontFamily: 'inherit', cursor: 'pointer', borderRadius: '2px'
+      });
+      assignBtn.addEventListener('click', () => {
+        const deck = loadDeck();
+        if (!deck || deck.length === 0) { this.setStatus('No active deck saved.', '#ff4444'); return; }
+        saveNpcDeckOverride(npc.id, deck);
+        this.setStatus(`Assigned ${deck.length}-card deck to ${npc.name}`, '#44ff44');
+        this.showTab('npc');
+      });
+      row.appendChild(assignBtn);
+
+      if (hasDeck) {
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = 'Clear';
+        Object.assign(clearBtn.style, {
+          background: '#442222', color: '#ff8888', border: '1px solid #aa4444',
+          padding: '4px 8px', fontSize: '8px', fontFamily: 'inherit', cursor: 'pointer', borderRadius: '2px'
+        });
+        clearBtn.addEventListener('click', () => {
+          removeNpcDeckOverride(npc.id);
+          this.setStatus(`Cleared deck for ${npc.name}`, '#ff8844');
+          this.showTab('npc');
+        });
+        row.appendChild(clearBtn);
+      }
+
+      container.appendChild(row);
+    });
+
+    this.tabContent.appendChild(container);
+  }
+
   destroyDom() {
     if (this.domContainer?.parentNode) {
       this.domContainer.parentNode.removeChild(this.domContainer);
@@ -765,6 +843,10 @@ export default class MasterModeScene extends Phaser.Scene {
     if (card.type === 'minion') {
       if (typeof card.atk !== 'number' || !Number.isInteger(card.atk) || card.atk < 0) return 'atk: int >= 0.';
       if (typeof card.hp !== 'number' || !Number.isInteger(card.hp) || card.hp < 1) return 'hp: int >= 1.';
+    }
+    if (card.requiredLevel != null) {
+      if (typeof card.requiredLevel !== 'number' || !Number.isInteger(card.requiredLevel) || card.requiredLevel < 1)
+        return 'requiredLevel: int >= 1.';
     }
     if (card.effect != null) {
       const err = this.validateEffect(card.effect);

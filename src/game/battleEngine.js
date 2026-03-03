@@ -55,7 +55,7 @@ function makeMinion(card) {
   };
 }
 
-export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts = []) {
+export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts = [], playerLevel = 99) {
   const playerDeck = shuffle(playerDeckIds.map(id => getCardById(id)).filter(Boolean));
   const enemyDeck  = shuffle(enemyDeckIds.map(id => getCardById(id)).filter(Boolean));
 
@@ -80,7 +80,8 @@ export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts =
     currentTurn: 'player',
     phase: 'playing',
     winner: null,
-    log: []
+    log: [],
+    playerLevel
   };
 
   if (arts.has('mana_crystal')) {
@@ -164,6 +165,7 @@ export function canPlayCard(state, who, handIndex) {
   if (!card) return false;
   if (card.cost > side.mana) return false;
   if (card.type === 'minion' && side.board.length >= MAX_BOARD) return false;
+  if (who === 'player' && card.requiredLevel && card.requiredLevel > state.playerLevel) return false;
   return true;
 }
 
