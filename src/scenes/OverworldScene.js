@@ -434,10 +434,28 @@ export default class OverworldScene extends Phaser.Scene {
       rx += 40;
     });
 
-    // controls help
-    this.add.text(sw - 4, 2, 'ESC:Hub  C:Craft', {
-      ...FONT, fontSize: '3px', color: '#666'
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(51);
+    // home button
+    const homeBtn = this.add.rectangle(sw - 24, 7, 40, 10, 0x334455, 0.8)
+      .setScrollFactor(0).setDepth(51).setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x5577aa);
+    this.add.text(sw - 24, 7, 'HOME', {
+      ...FONT, fontSize: '4px', color: '#aaccee'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    homeBtn.on('pointerdown', () => this.scene.start('Hub'));
+
+    // craft button
+    const craftBtn = this.add.rectangle(sw - 70, 7, 40, 10, 0x334433, 0.8)
+      .setScrollFactor(0).setDepth(51).setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0x44aa44);
+    this.add.text(sw - 70, 7, 'CRAFT', {
+      ...FONT, fontSize: '4px', color: '#88cc88'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    craftBtn.on('pointerdown', () => {
+      this.scene.start('Crafting', {
+        returnPlayerX: this.player.x,
+        returnPlayerY: this.player.y
+      });
+    });
 
     // interaction prompt (hidden initially)
     this.promptText = this.add.text(sw / 2, sh - 16, '', {
