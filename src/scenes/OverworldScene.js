@@ -130,6 +130,9 @@ export default class OverworldScene extends Phaser.Scene {
     this.nearTarget = null;
     this.drawHud();
     this.gatherCooldown = 0;
+
+    this.input.keyboard.on('keydown-ESC', () => this.tryExit());
+    this.events.on('shutdown', () => this.destroyButtons());
   }
 
   drawTerrain() {
@@ -393,8 +396,7 @@ export default class OverworldScene extends Phaser.Scene {
     };
     this.keyE = this.input.keyboard.addKey('E');
     this.keyEDown = false;
-    this.confirmingExit = false;
-    this.input.keyboard.addKey('ESC').on('down', () => this.showExitConfirm());
+    this.escPending = false;
   }
 
   drawHud() {
@@ -435,28 +437,8 @@ export default class OverworldScene extends Phaser.Scene {
       rx += 40;
     });
 
-    // ESC button (top-left, after HUD bar)
-    const escBtn = this.add.rectangle(4, 18, 30, 10, 0x443333, 0.8)
-      .setOrigin(0, 0).setScrollFactor(0).setDepth(51)
-      .setInteractive({ useHandCursor: true }).setStrokeStyle(1, 0xaa5555);
-    this.add.text(19, 23, 'ESC', {
-      ...FONT, fontSize: '4px', color: '#ff8888'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    escBtn.on('pointerdown', () => this.showExitConfirm());
-
-    // craft button
-    const craftBtn = this.add.rectangle(40, 18, 36, 10, 0x334433, 0.8)
-      .setOrigin(0, 0).setScrollFactor(0).setDepth(51)
-      .setInteractive({ useHandCursor: true }).setStrokeStyle(1, 0x44aa44);
-    this.add.text(58, 23, 'CRAFT', {
-      ...FONT, fontSize: '4px', color: '#88cc88'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    craftBtn.on('pointerdown', () => {
-      this.scene.start('Crafting', {
-        returnPlayerX: this.player.x,
-        returnPlayerY: this.player.y
-      });
-    });
+    // bottom bar with buttons (using DOM for reliable clicks at any zoom)
+    this.createButtons();
 
     // interaction prompt (hidden initially)
     this.promptText = this.add.text(sw / 2, sh - 16, '', {
@@ -464,6 +446,8 @@ export default class OverworldScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
 
     this.input.keyboard.addKey('C').on('down', () => {
+      if (this.escPending) return;
+      this.destroyButtons();
       this.scene.start('Crafting', {
         returnPlayerX: this.player.x,
         returnPlayerY: this.player.y
@@ -483,7 +467,7 @@ export default class OverworldScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.confirmingExit) return;
+    if (this.escPending) return;
 
     // movement
     const body = this.player.body;
@@ -619,60 +603,94 @@ export default class OverworldScene extends Phaser.Scene {
     });
   }
 
-  showExitConfirm() {
-    if (this.confirmingExit) return;
-    this.confirmingExit = true;
-    this.player.body.setVelocity(0, 0);
+  createButtons() {
+    if (this.btnBar) this.btnBar.remove();
 
-    const cam = this.cameras.main;
-    const sw = cam.width / ZOOM;
-    const sh = cam.height / ZOOM;
-    const cx = sw / 2, cy = sh / 2;
-
-    const grp = this.add.group();
-
-    const overlay = this.add.rectangle(cx, cy, sw, sh, 0x000000, 0.6)
-      .setScrollFactor(0).setDepth(200);
-    grp.add(overlay);
-
-    const box = this.add.rectangle(cx, cy, 140, 60, 0x1a1a2e, 0.95)
-      .setScrollFactor(0).setDepth(201).setStrokeStyle(2, 0x5577aa);
-    grp.add(box);
-
-    const title = this.add.text(cx, cy - 18, 'Return to Hub?', {
-      ...FONT, fontSize: '6px', color: '#ffffff'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(202);
-    grp.add(title);
-
-    const sub = this.add.text(cx, cy - 8, 'Progress is saved automatically', {
-      ...FONT, fontSize: '3px', color: '#888888'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(202);
-    grp.add(sub);
-
-    // YES button
-    const yesBtn = this.add.rectangle(cx - 30, cy + 14, 44, 16, 0x225522)
-      .setScrollFactor(0).setDepth(202).setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, 0x44aa44);
-    grp.add(yesBtn);
-    const yesTxt = this.add.text(cx - 30, cy + 14, 'YES', {
-      ...FONT, fontSize: '5px', color: '#44ff44'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(203);
-    grp.add(yesTxt);
-    yesBtn.on('pointerdown', () => this.scene.start('Hub'));
-
-    // NO button
-    const noBtn = this.add.rectangle(cx + 30, cy + 14, 44, 16, 0x552222)
-      .setScrollFactor(0).setDepth(202).setInteractive({ useHandCursor: true })
-      .setStrokeStyle(1, 0xaa4444);
-    grp.add(noBtn);
-    const noTxt = this.add.text(cx + 30, cy + 14, 'NO', {
-      ...FONT, fontSize: '5px', color: '#ff4444'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(203);
-    grp.add(noTxt);
-    noBtn.on('pointerdown', () => {
-      grp.clear(true, true);
-      this.confirmingExit = false;
+    const bar = document.createElement('div');
+    Object.assign(bar.style, {
+      position: 'fixed', top: '8px', left: '8px', zIndex: '999',
+      display: 'flex', gap: '6px'
     });
+
+    const makeBtn = (text, bg, fn) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      Object.assign(b.style, {
+        background: bg, color: '#fff', border: '1px solid #555',
+        padding: '6px 14px', fontSize: '12px', fontFamily: '"Press Start 2P", monospace',
+        cursor: 'pointer', borderRadius: '3px'
+      });
+      b.addEventListener('click', fn);
+      bar.appendChild(b);
+      return b;
+    };
+
+    makeBtn('ESC', '#553333', () => this.tryExit());
+    makeBtn('CRAFT', '#335533', () => {
+      this.destroyButtons();
+      this.scene.start('Crafting', {
+        returnPlayerX: this.player.x,
+        returnPlayerY: this.player.y
+      });
+    });
+
+    document.body.appendChild(bar);
+    this.btnBar = bar;
+  }
+
+  destroyButtons() {
+    if (this.btnBar) { this.btnBar.remove(); this.btnBar = null; }
+    if (this.confirmEl) { this.confirmEl.remove(); this.confirmEl = null; }
+  }
+
+  tryExit() {
+    if (this.confirmEl) return;
+    this.player.body.setVelocity(0, 0);
+    this.escPending = true;
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+      background: '#1a1a2e', border: '2px solid #5577aa', borderRadius: '6px',
+      padding: '20px 30px', zIndex: '1000', textAlign: 'center',
+      fontFamily: '"Press Start 2P", monospace'
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Return to Hub?';
+    Object.assign(title.style, { color: '#fff', fontSize: '14px', marginBottom: '16px' });
+    box.appendChild(title);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.gap = '16px';
+    btnRow.style.justifyContent = 'center';
+
+    const makeBtn = (text, bg, fn) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      Object.assign(b.style, {
+        background: bg, color: '#fff', border: 'none',
+        padding: '8px 24px', fontSize: '12px', fontFamily: 'inherit',
+        cursor: 'pointer', borderRadius: '4px'
+      });
+      b.addEventListener('click', fn);
+      btnRow.appendChild(b);
+    };
+
+    makeBtn('YES', '#225522', () => {
+      this.destroyButtons();
+      this.scene.start('Hub');
+    });
+    makeBtn('NO', '#552222', () => {
+      box.remove();
+      this.confirmEl = null;
+      this.escPending = false;
+    });
+
+    box.appendChild(btnRow);
+    document.body.appendChild(box);
+    this.confirmEl = box;
   }
 
   showMsg(msg) {
