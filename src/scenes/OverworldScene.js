@@ -14,7 +14,7 @@ const SPEED = 120;
 const INTERACT_DIST = 24;
 const ZOOM = 2;
 
-const FONT = { fontFamily: '"Press Start 2P", monospace' };
+const FONT = { fontFamily: 'Arial, sans-serif' };
 
 const T = { GRASS: 0, GRASS2: 1, PATH: 2, WATER: 3, SAND: 4, WALL: 5, DARK: 6, BRIDGE: 7 };
 const TCOL = {
@@ -219,7 +219,7 @@ export default class OverworldScene extends Phaser.Scene {
 
       // label above roof
       this.add.text(bx + bw / 2, by - 10, b.label, {
-        ...FONT, fontSize: '5px', color: '#ddd', stroke: '#000', strokeThickness: 2
+        ...FONT, fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3
       }).setOrigin(0.5).setDepth(15);
     });
   }
@@ -366,11 +366,11 @@ export default class OverworldScene extends Phaser.Scene {
       }
 
       const label = this.add.text(x, y - 14, npc.name, {
-        ...FONT, fontSize: '4px', color: '#ffcc44', stroke: '#000', strokeThickness: 1
+        ...FONT, fontSize: '10px', color: '#fff', stroke: '#000', strokeThickness: 2
       }).setOrigin(0.5).setDepth(15);
 
       const lvl = this.add.text(x, y + 12, `Lv${npc.level}`, {
-        ...FONT, fontSize: '3px', color: '#aaa', stroke: '#000', strokeThickness: 1
+        ...FONT, fontSize: '9px', color: '#ffcc44', stroke: '#000', strokeThickness: 2
       }).setOrigin(0.5).setDepth(15);
 
       // small collision body so player can stand nearby
@@ -411,31 +411,31 @@ export default class OverworldScene extends Phaser.Scene {
     const sw = cam.width / ZOOM;
     const sh = cam.height / ZOOM;
 
-    this.hudBg = this.add.rectangle(0, 0, sw, 14, 0x000000, 0.6)
+    this.hudBg = this.add.rectangle(0, 0, sw, 22, 0x000000, 0.85)
       .setOrigin(0, 0).setScrollFactor(0).setDepth(50);
-    this.hudLevel = this.add.text(4, 2, `LV${level}`, {
-      ...FONT, fontSize: '5px', color: '#e6b422'
+    this.hudLevel = this.add.text(8, 4, `LV ${level}`, {
+      ...FONT, fontSize: '14px', color: '#fff'
     }).setScrollFactor(0).setDepth(51);
 
-    const barX = 40, barW = 50;
-    this.add.rectangle(barX, 5, barW, 4, 0x333333)
+    const barX = 55, barW = 60;
+    this.add.rectangle(barX, 11, barW, 6, 0x333333)
       .setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
     const fill = Math.max(1, (xp / needed) * barW);
-    this.add.rectangle(barX, 5, fill, 4, 0x44aaff)
+    this.add.rectangle(barX, 11, fill, 6, 0x44aaff)
       .setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
-    this.add.text(barX + barW + 4, 2, `${xp}/${needed}`, {
-      ...FONT, fontSize: '4px', color: '#aaa'
+    this.add.text(barX + barW + 8, 4, `${xp}/${needed}`, {
+      ...FONT, fontSize: '12px', color: '#fff'
     }).setScrollFactor(0).setDepth(51);
 
     // resources
     const resTypes = [RES.WOOD, RES.STONE, RES.HERB, RES.CRYSTAL];
-    let rx = 160;
+    let rx = 200;
     resTypes.forEach(type => {
       const meta = RES_META[type];
-      this.add.text(rx, 2, `${meta.icon}${res[type] || 0}`, {
-        fontSize: '6px', color: meta.color
+      this.add.text(rx, 4, `${meta.icon} ${res[type] || 0}`, {
+        ...FONT, fontSize: '12px', color: meta.color
       }).setScrollFactor(0).setDepth(51);
-      rx += 40;
+      rx += 55;
     });
 
     // artifact (top-left: logo + text, below HUD bar)
@@ -443,14 +443,14 @@ export default class OverworldScene extends Phaser.Scene {
     if (arts && arts.length > 0) {
       const def = ARTIFACT_DEFS[arts[0]];
       if (def) {
-        const bw = 90, bh = 28;
-        this.add.rectangle(4, 18, bw, bh, 0x1a2233, 0.95)
+        const bw = 120, bh = 36;
+        this.add.rectangle(4, 26, bw, bh, 0x1a2233, 0.95)
           .setOrigin(0, 0).setScrollFactor(0).setDepth(51).setStrokeStyle(1, 0x556677);
-        this.add.text(22, 32, def.icon, {
-          fontSize: '12px', color: def.color
+        this.add.text(28, 44, def.icon, {
+          fontSize: '18px', color: def.color
         }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-        this.add.text(42, 32, def.name, {
-          ...FONT, fontSize: '5px', color: '#e6b422'
+        this.add.text(52, 44, def.name, {
+          ...FONT, fontSize: '12px', color: '#fff'
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
       }
     }
@@ -459,8 +459,8 @@ export default class OverworldScene extends Phaser.Scene {
     this.createButtons();
 
     // interaction prompt (hidden initially)
-    this.promptText = this.add.text(sw / 2, sh - 16, '', {
-      ...FONT, fontSize: '5px', color: '#44ff44', stroke: '#000', strokeThickness: 2
+    this.promptText = this.add.text(sw / 2, sh - 24, '', {
+      ...FONT, fontSize: '14px', color: '#fff', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
 
     this.input.keyboard.addKey('C').on('down', () => {
@@ -592,7 +592,7 @@ export default class OverworldScene extends Phaser.Scene {
 
     // floating text
     const ft = this.add.text(node.px, node.py - 10, `+1 ${meta.name}`, {
-      ...FONT, fontSize: '4px', color: meta.color, stroke: '#000', strokeThickness: 1
+      ...FONT, fontSize: '10px', color: '#fff', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5).setDepth(25);
     this.tweens.add({
       targets: ft, y: ft.y - 16, alpha: 0, duration: 800,
@@ -661,7 +661,7 @@ export default class OverworldScene extends Phaser.Scene {
     const hint = document.createElement('div');
     hint.textContent = 'E to interact with NPCs or collect materials';
     Object.assign(hint.style, {
-      color: '#aaa', fontSize: '10px', fontFamily: '"Press Start 2P", monospace'
+      color: '#fff', fontSize: '14px', fontFamily: 'Arial, sans-serif'
     });
     bar.appendChild(hint);
 
@@ -726,7 +726,7 @@ export default class OverworldScene extends Phaser.Scene {
 
   showMsg(msg) {
     const t = this.add.text(this.player.x, this.player.y - 16, msg, {
-      ...FONT, fontSize: '4px', color: '#ff4444', stroke: '#000', strokeThickness: 2
+      ...FONT, fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5).setDepth(100);
     this.time.delayedCall(2000, () => t.destroy());
   }
