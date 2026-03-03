@@ -215,14 +215,6 @@ export default class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5));
       }
 
-      const lvlLocked = card.requiredLevel && card.requiredLevel > this.bs.playerLevel;
-      if (lvlLocked) {
-        this.uiGroup.add(this.add.rectangle(x, y, CARD_W, CARD_H, 0x000000, 0.5));
-        this.uiGroup.add(this.add.text(x, y - 4, `Lv${card.requiredLevel}`, {
-          ...FONT, fontSize: '8px', color: '#ff4444', stroke: '#000', strokeThickness: 2
-        }).setOrigin(0.5));
-      }
-
       if (playable && !this.targetMode && this.bs.phase === 'playing' && this.bs.currentTurn === 'player') {
         bg.on('pointerdown', () => {
           if (needsTarget(card)) {

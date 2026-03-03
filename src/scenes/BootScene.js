@@ -22,6 +22,15 @@ export default class BootScene extends Phaser.Scene {
       this.load.image(key, `./sprites/${name}`);
     });
 
+    // Ninja Adventure assets
+    this.load.spritesheet('ninja_player', './ninja/player.png', { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('ninja_npc_samurai', './ninja/npc_samurai.png', { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('ninja_npc_green', './ninja/npc_green.png', { frameWidth: 16, frameHeight: 16 });
+    this.load.image('ninja_bush', './ninja/bush.png');
+    this.load.image('ninja_crate', './ninja/crate.png');
+    this.load.image('ninja_pot', './ninja/pot.png');
+    this.load.image('ninja_heart', './ninja/heart.png');
+
     this.load.once('complete', () => {
       this.scene.start('Hub');
     });

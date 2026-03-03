@@ -16,11 +16,12 @@ export default class HubScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const btns = [
-      { label: 'OVERWORLD',     y: 240, cb: () => this.scene.start('Overworld') },
-      { label: 'QUICK BATTLE',  y: 310, cb: () => this.scene.start('DeckSelect') },
-      { label: 'DECK BUILDER',  y: 380, cb: () => this.scene.start('DeckBuilder') },
-      { label: 'MASTER MODE',   y: 450, cb: () => this.scene.start('MasterMode') },
-      { label: 'RESET SAVE',    y: 560, cb: () => { resetSave(); this.scene.start('Boot'); } }
+      { label: 'OVERWORLD',     y: 220, cb: () => this.scene.start('Overworld') },
+      { label: 'CARD FORGE',    y: 285, cb: () => this.scene.start('Crafting') },
+      { label: 'QUICK BATTLE',  y: 350, cb: () => this.scene.start('DeckSelect') },
+      { label: 'DECK BUILDER',  y: 415, cb: () => this.scene.start('DeckBuilder') },
+      { label: 'MASTER MODE',   y: 480, cb: () => this.scene.start('MasterMode') },
+      { label: 'RESET SAVE',    y: 580, cb: () => { resetSave(); this.scene.start('Boot'); } }
     ];
 
     btns.forEach(({ label, y, cb }) => {

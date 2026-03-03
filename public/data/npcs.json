@@ -1,7 +1,7 @@
 [
-  { "id": "npc_archer",    "name": "Elven Archer",     "portraitCard": "base_elven_archer",  "x": 7,  "y": 6,  "xpReward": 20, "level": 1 },
-  { "id": "npc_footman",   "name": "Goldshire Guard",  "portraitCard": "base_goldshire",     "x": 20, "y": 8,  "xpReward": 25, "level": 2 },
-  { "id": "npc_mage",      "name": "Arcane Mage",      "portraitCard": "base_gnomish",       "x": 33, "y": 6,  "xpReward": 30, "level": 3 },
-  { "id": "npc_assassin",  "name": "Shadow Assassin",  "portraitCard": "base_nightblade",    "x": 8,  "y": 20, "xpReward": 40, "level": 4 },
-  { "id": "npc_knight",    "name": "Golden Knight",    "portraitCard": "base_shieldmasta",   "x": 20, "y": 15, "xpReward": 60, "level": 5 }
+  { "id": "npc_archer",    "name": "Elven Archer",     "portraitCard": "base_elven_archer",  "x": 34, "y": 24, "xpReward": 20, "level": 1 },
+  { "id": "npc_footman",   "name": "Goldshire Guard",  "portraitCard": "base_goldshire",     "x": 45, "y": 24, "xpReward": 25, "level": 2 },
+  { "id": "npc_mage",      "name": "Arcane Mage",      "portraitCard": "base_gnomish",       "x": 39, "y": 18, "xpReward": 30, "level": 3 },
+  { "id": "npc_assassin",  "name": "Shadow Assassin",  "portraitCard": "base_nightblade",    "x": 34, "y": 32, "xpReward": 40, "level": 4 },
+  { "id": "npc_knight",    "name": "Golden Knight",    "portraitCard": "base_shieldmasta",   "x": 45, "y": 32, "xpReward": 60, "level": 5 }
 ]

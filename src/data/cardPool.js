@@ -38,12 +38,22 @@ export function getStarterCollection() {
 }
 
 export function getStarterDeck() {
-  const pool = [...baseCards].sort((a, b) => a.cost - b.cost);
-  const deck = [];
-  let i = 0;
-  while (deck.length < 30) {
-    deck.push(pool[i % pool.length].id);
-    i++;
-  }
-  return deck;
+  const picks = [
+    'base_murloc', 'base_murloc',
+    'base_goldshire', 'base_goldshire',
+    'base_raptor', 'base_raptor',
+    'base_croc', 'base_croc',
+    'base_frostwolf', 'base_frostwolf',
+    'base_shattered', 'base_shattered',
+    'base_arcane_int', 'base_arcane_int',
+    'base_yeti', 'base_yeti',
+    'base_shieldmasta', 'base_shieldmasta',
+    'base_fireball', 'base_fireball',
+    'base_gnomish', 'base_gnomish',
+    'base_boulderfist', 'base_boulderfist',
+    'base_nightblade', 'base_nightblade',
+    'base_war_golem', 'base_war_golem',
+    'base_ironbark', 'base_ironbark'
+  ];
+  return picks;
 }

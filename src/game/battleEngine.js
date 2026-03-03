@@ -165,7 +165,6 @@ export function canPlayCard(state, who, handIndex) {
   if (!card) return false;
   if (card.cost > side.mana) return false;
   if (card.type === 'minion' && side.board.length >= MAX_BOARD) return false;
-  if (who === 'player' && card.requiredLevel && card.requiredLevel > state.playerLevel) return false;
   return true;
 }
 

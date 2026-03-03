@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { loadCollection, saveCollection, loadDeck, saveDeck, loadCustomCards, loadDeckSlots, saveDeckSlots } from '../data/storage.js';
 import { getCardById, getAllCards, getBaseCards } from '../data/cardPool.js';
-import { loadProgression } from '../data/progression.js';
 
 const W = 1024, H = 768;
 const COLS = 5;
@@ -22,7 +21,6 @@ export default class DeckBuilderScene extends Phaser.Scene {
     this.deckIds = loadDeck() || [];
     this.baseIds = new Set(getBaseCards().map(c => c.id));
     this.customIds = new Set(loadCustomCards().map(c => c.id));
-    this.playerLevel = loadProgression().level;
     this.scrollOffset = 0;
     this.slotsOpen = false;
     this.uiGroup = this.add.group();
@@ -66,55 +64,44 @@ export default class DeckBuilderScene extends Phaser.Scene {
       const y = 60 + row * (CARD_H + GAP) + CARD_H / 2;
 
       const inDeckCount = this.deckIds.filter(d => d === id).length;
-      const reqLvl = card.requiredLevel || 1;
-      const locked = reqLvl > this.playerLevel;
 
-      const bg = this.add.rectangle(x, y, CARD_W, CARD_H, locked ? 0x111118 : 0x1a1a2a).setInteractive({ useHandCursor: true });
-      bg.setStrokeStyle(1, locked ? 0x332222 : 0x445566);
-      if (locked) bg.setAlpha(0.6);
+      const bg = this.add.rectangle(x, y, CARD_W, CARD_H, 0x1a1a2a).setInteractive({ useHandCursor: true });
+      bg.setStrokeStyle(1, 0x445566);
       this.uiGroup.add(bg);
 
       const key = spriteKey(card);
       if (key && this.textures.exists(key)) {
         const img = this.add.image(x - 24, y, key).setDisplaySize(40, 50);
-        if (locked) img.setAlpha(0.3);
         this.uiGroup.add(img);
       }
 
       const tx = key ? x + 16 : x;
       this.uiGroup.add(this.add.text(tx, y - 16, card.name.slice(0, 11), {
-        ...FONT, fontSize: '7px', color: locked ? '#553333' : '#fff'
+        ...FONT, fontSize: '7px', color: '#fff'
       }).setOrigin(0.5));
 
       const costTxt = `[${card.cost}]`;
       const statTxt = card.type === 'minion' ? `${card.atk}/${card.hp}` : 'spell';
       this.uiGroup.add(this.add.text(tx, y + 4, `${costTxt} ${statTxt}`, {
-        ...FONT, fontSize: '7px', color: locked ? '#442222' : '#aaa'
+        ...FONT, fontSize: '7px', color: '#aaa'
       }).setOrigin(0.5));
 
-      if (locked) {
-        this.uiGroup.add(this.add.text(tx, y + 22, `Req Lv${reqLvl}`, {
-          ...FONT, fontSize: '7px', color: '#ff4444'
-        }).setOrigin(0.5));
-      } else {
-        const isBase = this.baseIds.has(id);
-        const isCustom = this.customIds.has(id);
-        const hasOverride = isBase && isCustom;
-        let tag, tagColor;
-        if (hasOverride) { tag = 'MOD'; tagColor = '#ffcc44'; }
-        else if (isCustom) { tag = 'CUSTOM'; tagColor = '#88ff88'; }
-        else { tag = 'BASE'; tagColor = '#667788'; }
+      const isBase = this.baseIds.has(id);
+      const isCustom = this.customIds.has(id);
+      const hasOverride = isBase && isCustom;
+      let tag, tagColor;
+      if (hasOverride) { tag = 'MOD'; tagColor = '#ffcc44'; }
+      else if (isCustom) { tag = 'CUSTOM'; tagColor = '#88ff88'; }
+      else { tag = 'BASE'; tagColor = '#667788'; }
 
-        this.uiGroup.add(this.add.text(tx, y + 18, `in deck: ${inDeckCount}`, {
-          ...FONT, fontSize: '6px', color: inDeckCount > 0 ? '#66aaff' : '#555'
-        }).setOrigin(0.5));
-        this.uiGroup.add(this.add.text(tx, y + 30, tag, {
-          ...FONT, fontSize: '6px', color: tagColor
-        }).setOrigin(0.5));
-      }
+      this.uiGroup.add(this.add.text(tx, y + 18, `in deck: ${inDeckCount}`, {
+        ...FONT, fontSize: '6px', color: inDeckCount > 0 ? '#66aaff' : '#555'
+      }).setOrigin(0.5));
+      this.uiGroup.add(this.add.text(tx, y + 30, tag, {
+        ...FONT, fontSize: '6px', color: tagColor
+      }).setOrigin(0.5));
 
       bg.on('pointerdown', () => {
-        if (locked) { this.showWarning(`Requires Level ${reqLvl}!`); return; }
         if (this.deckIds.length >= 30) return;
         this.deckIds.push(id);
         this.redraw();
