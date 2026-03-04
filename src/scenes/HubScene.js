@@ -53,6 +53,14 @@ export default class HubScene extends Phaser.Scene {
 
   _pickUsername() {
     if (this._nameBox) return;
+
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+      zIndex: '999', background: 'rgba(0,0,0,0.4)'
+    });
+    document.body.appendChild(overlay);
+
     const box = document.createElement('div');
     Object.assign(box.style, {
       position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
@@ -96,16 +104,17 @@ export default class HubScene extends Phaser.Scene {
       btnRow.appendChild(b);
     };
 
+    const cleanup = () => { overlay.remove(); box.remove(); this._nameBox = null; };
+
     const go = () => {
       const name = input.value.trim();
       if (!name) { input.style.borderColor = '#ff4444'; return; }
-      box.remove();
-      this._nameBox = null;
+      cleanup();
       this.scene.start('MmoMap', { username: name });
     };
 
     makeBtn('JOIN', '#226644', go);
-    makeBtn('CANCEL', '#552222', () => { box.remove(); this._nameBox = null; });
+    makeBtn('CANCEL', '#552222', cleanup);
 
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
 
