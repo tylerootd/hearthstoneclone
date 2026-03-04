@@ -8,7 +8,7 @@ const FONT = { fontFamily: 'Arial, sans-serif' };
 const SEND_RATE = 50;
 const INTERACT_DIST = 48;
 const HIDEOUT_DOOR = { x: 480, y: 1044 };
-const HIDEOUT_DETECT = 36;
+const HIDEOUT_DETECT = 60;
 
 // Challenge states
 const ST_IDLE = 0;
@@ -53,9 +53,13 @@ export default class MmoMapScene extends Phaser.Scene {
       this.connectToServer();
     }
 
-    this.add.text(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 50, "Dragon's Den", {
-      fontFamily: 'Arial, sans-serif', fontSize: '7px', fontStyle: 'bold',
-      color: '#ff00aa', stroke: '#000', strokeThickness: 3
+    if (this.textures.exists('dragons_den_building')) {
+      this.denBuilding = this.add.image(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 40, 'dragons_den_building')
+        .setScale(2).setDepth(4);
+    }
+    this.add.text(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 100, "DRAGON'S DEN", {
+      fontFamily: 'Arial, sans-serif', fontSize: '8px', fontStyle: 'bold',
+      color: '#ff00aa', stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(12);
 
     this.events.on('shutdown', () => this.cleanup());
