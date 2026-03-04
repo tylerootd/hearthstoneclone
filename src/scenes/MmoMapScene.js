@@ -183,14 +183,15 @@ export default class MmoMapScene extends Phaser.Scene {
       const serverUrl = isLocal ? 'ws://localhost:2567' : 'wss://hearthstone-mmo-server.onrender.com';
       this.ws = new WebSocket(serverUrl);
 
+      setupWs(this);
+
       this.ws.onopen = () => {
         const deckIds = loadDeck() || [];
         const cards = deckIds.map(id => getCardById(id)).filter(Boolean);
         const artifacts = loadArtifacts() || [];
         this.ws.send(JSON.stringify({ type: 'deck', cards, artifacts }));
+        this.ws.send(JSON.stringify({ type: 'sync' }));
       };
-
-      setupWs(this);
 
       this.ws.onerror = () => {
         if (this.playerCountText) this.playerCountText.setText('Server offline - solo mode');
