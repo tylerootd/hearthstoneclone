@@ -7,6 +7,7 @@ const ZOOM = 2;
 const FONT = { fontFamily: 'Arial, sans-serif' };
 const SEND_RATE = 50;
 const INTERACT_DIST = 48;
+const HIDEOUT_DOOR = { x: 192, y: 260 };
 
 // Challenge states
 const ST_IDLE = 0;
@@ -50,6 +51,11 @@ export default class MmoMapScene extends Phaser.Scene {
     } else {
       this.connectToServer();
     }
+
+    const doorMarker = this.add.text(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 14, '⬡', {
+      fontSize: '10px', color: '#ff00aa'
+    }).setOrigin(0.5).setDepth(11);
+    this.tweens.add({ targets: doorMarker, alpha: { from: 0.4, to: 1 }, duration: 800, yoyo: true, repeat: -1 });
 
     this.events.on('shutdown', () => this.cleanup());
   }
@@ -295,6 +301,18 @@ export default class MmoMapScene extends Phaser.Scene {
     }
   }
 
+  /* ──────── building entry ──────── */
+
+  enterHideout() {
+    this.keepWs = true;
+    this.scene.start('YakuzaHideout', {
+      ws: this.ws,
+      myId: this.myId,
+      playerX: this.player.x,
+      playerY: this.player.y
+    });
+  }
+
   /* ──────── PvP battle ──────── */
 
   startPvpBattle() {
@@ -396,7 +414,13 @@ export default class MmoMapScene extends Phaser.Scene {
           console.log('[MMO] Sent challenge to', nearId);
         }
       } else {
-        this.promptText.setText('');
+        const doorDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, HIDEOUT_DOOR.x, HIDEOUT_DOOR.y);
+        if (doorDist < 40) {
+          this.promptText.setText("[E] Enter Dragon's Den");
+          if (ePressed) { this.enterHideout(); return; }
+        } else {
+          this.promptText.setText('');
+        }
       }
     }
 

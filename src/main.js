@@ -10,6 +10,7 @@ import MasterModeScene from './scenes/MasterModeScene.js';
 import CraftingScene from './scenes/CraftingScene.js';
 import MmoMapScene from './scenes/MmoMapScene.js';
 import PvpBattleScene from './scenes/PvpBattleScene.js';
+import YakuzaHideoutScene from './scenes/YakuzaHideoutScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -22,7 +23,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, ArtifactPickScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene, MmoMapScene, PvpBattleScene]
+  scene: [BootScene, ArtifactPickScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene, MmoMapScene, PvpBattleScene, YakuzaHideoutScene]
 };
 
 new Phaser.Game(config);
