@@ -84,9 +84,17 @@ export default class MmoMapScene extends Phaser.Scene {
 
     const doorTX = Math.floor(HIDEOUT_DOOR.x / 32);
     const doorTY = Math.floor(HIDEOUT_DOOR.y / 32);
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -6; dy <= 6; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const t = this.worldLayer.getTileAt(doorTX + dx, doorTY + dy);
+        if (t) t.setCollision(false);
+      }
+    }
+    const spawnTX = Math.floor(352 / 32);
+    const spawnTY = Math.floor(1216 / 32);
+    for (let ty = Math.min(spawnTY, doorTY) - 1; ty <= Math.max(spawnTY, doorTY) + 1; ty++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const t = this.worldLayer.getTileAt(spawnTX + dx, ty);
         if (t) t.setCollision(false);
       }
     }
