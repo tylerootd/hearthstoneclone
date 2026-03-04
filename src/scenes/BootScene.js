@@ -31,6 +31,11 @@ export default class BootScene extends Phaser.Scene {
     this.load.image('ninja_pot', './ninja/pot.png');
     this.load.image('ninja_heart', './ninja/heart.png');
 
+    // Tuxemon Tiled-map assets (loaded from GitHub CDN)
+    const TUXEMON = 'https://raw.githubusercontent.com/mikewesthad/phaser-3-tilemap-blog-posts/master/examples/post-1/assets';
+    this.load.image('town-tiles', `${TUXEMON}/tilesets/tuxmon-sample-32px-extruded.png`);
+    this.load.tilemapTiledJSON('town-map', `${TUXEMON}/tilemaps/tuxemon-town.json`);
+
     this.load.once('complete', () => {
       const arts = loadArtifacts();
       this.scene.start(arts && arts.length > 0 ? 'Hub' : 'ArtifactPick');
