@@ -8,6 +8,8 @@ import BattleScene from './scenes/BattleScene.js';
 import DeckBuilderScene from './scenes/DeckBuilderScene.js';
 import MasterModeScene from './scenes/MasterModeScene.js';
 import CraftingScene from './scenes/CraftingScene.js';
+import MmoMapScene from './scenes/MmoMapScene.js';
+import PvpBattleScene from './scenes/PvpBattleScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -20,7 +22,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, ArtifactPickScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene]
+  scene: [BootScene, ArtifactPickScene, HubScene, OverworldScene, DeckSelectScene, BattleScene, DeckBuilderScene, MasterModeScene, CraftingScene, MmoMapScene, PvpBattleScene]
 };
 
 new Phaser.Game(config);
