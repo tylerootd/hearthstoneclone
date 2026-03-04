@@ -62,7 +62,7 @@ export default class MmoMapScene extends Phaser.Scene {
       color: '#ff00aa', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5).setDepth(12);
 
-    this.events.on('shutdown', () => this.cleanup());
+    this.events.on('shutdown', () => { this.destroyButtons(); this.cleanup(); });
   }
 
   /* ──────── Tiled map ──────── */
@@ -147,7 +147,20 @@ export default class MmoMapScene extends Phaser.Scene {
     this.keyQ = this.input.keyboard.addKey('Q');
     this.keyEDown = false;
     this.keyQDown = false;
-    this.input.keyboard.on('keydown-ESC', () => this.goBack());
+    this.escPending = false;
+    this.input.keyboard.on('keydown-ESC', () => this.tryExit());
+    this.input.keyboard.addKey('C').on('down', () => {
+      if (this.escPending) return;
+      this.destroyButtons();
+      this.cleanup();
+      this.scene.start('Crafting', {
+        returnTo: 'MmoMap',
+        returnPlayerX: this.player.x,
+        returnPlayerY: this.player.y,
+        ws: this.ws,
+        myId: this.myId
+      });
+    });
   }
 
   /* ──────── HUD ──────── */
@@ -161,7 +174,7 @@ export default class MmoMapScene extends Phaser.Scene {
       ...FONT, fontSize: '11px', color: '#aaccee', stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(50);
 
-    this.add.text(8, 40, 'ESC = back to hub', {
+    this.add.text(8, 40, 'C = craft  |  ESC = exit', {
       ...FONT, fontSize: '10px', color: '#999', stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(50);
 
@@ -176,6 +189,8 @@ export default class MmoMapScene extends Phaser.Scene {
     this.statusText = this.add.text(sw / 2, sh - 32, '', {
       ...FONT, fontSize: '11px', color: '#ffcc44', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+
+    this.createButtons();
   }
 
   updatePlayerCount() {
@@ -316,6 +331,7 @@ export default class MmoMapScene extends Phaser.Scene {
   /* ──────── building entry ──────── */
 
   enterHideout() {
+    this.destroyButtons();
     this.player.body.setVelocity(0, 0);
     const cam = this.cameras.main;
     const doorL = this.add.rectangle(HIDEOUT_DOOR.x - 8, HIDEOUT_DOOR.y - 16, 8, 20, 0x3a2211).setDepth(15).setOrigin(1, 0.5);
@@ -369,7 +385,7 @@ export default class MmoMapScene extends Phaser.Scene {
   /* ──────── update loop ──────── */
 
   update(time) {
-    if (!this.player) return;
+    if (!this.player || this.escPending) return;
 
     // Movement
     let vx = 0, vy = 0;
@@ -480,9 +496,112 @@ export default class MmoMapScene extends Phaser.Scene {
     }
   }
 
+  /* ──────── DOM buttons ──────── */
+
+  createButtons() {
+    if (this.btnBar) this.btnBar.remove();
+
+    const bar = document.createElement('div');
+    Object.assign(bar.style, {
+      position: 'fixed', top: '8px', left: '8px', zIndex: '999',
+      display: 'flex', flexDirection: 'column', gap: '6px'
+    });
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.gap = '6px';
+
+    const makeBtn = (text, bg, fn) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      Object.assign(b.style, {
+        background: bg, color: '#fff', border: '1px solid #555',
+        padding: '6px 14px', fontSize: '12px', fontFamily: '"Press Start 2P", monospace',
+        cursor: 'pointer', borderRadius: '3px'
+      });
+      b.addEventListener('click', fn);
+      btnRow.appendChild(b);
+      return b;
+    };
+
+    makeBtn('ESC', '#553333', () => this.tryExit());
+    makeBtn('CRAFT', '#335533', () => {
+      this.destroyButtons();
+      this.keepWs = true;
+      this.scene.start('Crafting', {
+        returnTo: 'MmoMap',
+        returnPlayerX: this.player.x,
+        returnPlayerY: this.player.y,
+        ws: this.ws,
+        myId: this.myId
+      });
+    });
+
+    bar.appendChild(btnRow);
+    document.body.appendChild(bar);
+    this.btnBar = bar;
+  }
+
+  destroyButtons() {
+    if (this.btnBar) { this.btnBar.remove(); this.btnBar = null; }
+    if (this.confirmEl) { this.confirmEl.remove(); this.confirmEl = null; }
+  }
+
+  tryExit() {
+    if (this.confirmEl) return;
+    this.player.body.setVelocity(0, 0);
+    this.escPending = true;
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+      background: '#1a1a2e', border: '2px solid #5577aa', borderRadius: '6px',
+      padding: '20px 30px', zIndex: '1000', textAlign: 'center',
+      fontFamily: '"Press Start 2P", monospace'
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Return to Hub?';
+    Object.assign(title.style, { color: '#fff', fontSize: '14px', marginBottom: '16px' });
+    box.appendChild(title);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.gap = '16px';
+    btnRow.style.justifyContent = 'center';
+
+    const makeBtn = (text, bg, fn) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      Object.assign(b.style, {
+        background: bg, color: '#fff', border: 'none',
+        padding: '8px 24px', fontSize: '12px', fontFamily: 'inherit',
+        cursor: 'pointer', borderRadius: '4px'
+      });
+      b.addEventListener('click', fn);
+      btnRow.appendChild(b);
+    };
+
+    makeBtn('YES', '#225522', () => {
+      this.destroyButtons();
+      this.cleanup();
+      this.scene.start('Hub');
+    });
+    makeBtn('NO', '#552222', () => {
+      box.remove();
+      this.confirmEl = null;
+      this.escPending = false;
+    });
+
+    box.appendChild(btnRow);
+    document.body.appendChild(box);
+    this.confirmEl = box;
+  }
+
   /* ──────── cleanup ──────── */
 
   goBack() {
+    this.destroyButtons();
     this.cleanup();
     this.scene.start('Hub');
   }

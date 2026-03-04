@@ -108,10 +108,14 @@ export default class CraftingScene extends Phaser.Scene {
     }).setOrigin(0.5));
 
     backBtn.on('pointerdown', () => {
-      this.scene.start('Overworld', {
+      const target = this.returnData.returnTo || 'Overworld';
+      const sceneData = {
         playerX: this.returnData.returnPlayerX,
         playerY: this.returnData.returnPlayerY
-      });
+      };
+      if (this.returnData.ws) sceneData.ws = this.returnData.ws;
+      if (this.returnData.myId) sceneData.myId = this.returnData.myId;
+      this.scene.start(target, sceneData);
     });
   }
 
