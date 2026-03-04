@@ -180,7 +180,9 @@ export default class MmoMapScene extends Phaser.Scene {
 
   connectToServer() {
     try {
-      this.ws = new WebSocket('ws://localhost:2567');
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const serverUrl = isLocal ? 'ws://localhost:2567' : 'wss://hearthstone-mmo-server.onrender.com';
+      this.ws = new WebSocket(serverUrl);
 
       this.ws.onopen = () => {
         console.log('[MMO] Connected');
