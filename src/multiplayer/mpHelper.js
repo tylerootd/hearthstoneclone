@@ -18,6 +18,9 @@ export function initMp(scene, opts = {}) {
     returnScene: opts.returnScene || 'MmoMap',
     spriteScale: opts.spriteScale || 1.5,
     tagOffset: opts.tagOffset || -18,
+    chatMessages: [],
+    playerListData: [],
+    username: opts.username || 'Player',
   };
 }
 
@@ -39,12 +42,12 @@ function handleMsg(scene, msg) {
     case 'welcome':
       scene.myId = msg.id;
       for (const [pid, p] of Object.entries(msg.players)) {
-        if (pid !== scene.myId) addRemote(scene, pid, p.x, p.y, p.anim);
+        if (pid !== scene.myId) addRemote(scene, pid, p.x, p.y, p.anim, p.name);
       }
       syncCount(scene);
       break;
     case 'join':
-      addRemote(scene, msg.id, msg.x, msg.y, msg.anim);
+      addRemote(scene, msg.id, msg.x, msg.y, msg.anim, msg.name);
       syncCount(scene);
       break;
     case 'move': {
@@ -59,6 +62,21 @@ function handleMsg(scene, msg) {
       }
       removeRemote(scene, msg.id);
       syncCount(scene);
+      break;
+    case 'name_update': {
+      const r = mp.remotePlayers[msg.id];
+      if (r) { r.name = msg.name; r.tag.setText(msg.name); }
+      break;
+    }
+    case 'chat':
+      mp.chatMessages.push({ name: msg.name, text: msg.text, time: Date.now() });
+      if (mp.chatMessages.length > 100) mp.chatMessages.shift();
+      if (scene._onChat) scene._onChat(msg);
+      break;
+    case 'player_list':
+      mp.playerListData = msg.players || [];
+      syncCount(scene);
+      if (scene._onPlayerList) scene._onPlayerList(msg);
       break;
     case 'challenged':
       if (mp.challengeState === ST_IDLE) { mp.challengeState = ST_CHALLENGED; mp.challengePeer = msg.fromId; }
@@ -76,14 +94,27 @@ function handleMsg(scene, msg) {
   if (scene.onServerMessage) scene.onServerMessage(msg);
 }
 
-function addRemote(scene, id, x, y, anim) {
+export function sendChat(scene, text) {
+  if (scene.ws?.readyState === WebSocket.OPEN && text.trim()) {
+    scene.ws.send(JSON.stringify({ type: 'chat', text: text.trim().slice(0, 200) }));
+  }
+}
+
+export function sendName(scene, name) {
+  if (scene.ws?.readyState === WebSocket.OPEN) {
+    scene.ws.send(JSON.stringify({ type: 'set_name', name }));
+  }
+}
+
+function addRemote(scene, id, x, y, anim, name) {
   const mp = scene._mp;
   if (mp.remotePlayers[id]) return;
+  const displayName = name || ('Player ' + id);
   const sprite = scene.add.sprite(x, y, 'ninja_npc_green', 0).setDepth(6).setScale(mp.spriteScale);
-  const tag = scene.add.text(x, y + mp.tagOffset, `Player ${id}`, {
+  const tag = scene.add.text(x, y + mp.tagOffset, displayName, {
     ...FONT, fontSize: '7px', color: '#aaffaa', stroke: '#000', strokeThickness: 2
   }).setOrigin(0.5).setDepth(11);
-  mp.remotePlayers[id] = { sprite, tag, targetX: x, targetY: y, anim: anim || 'idle_down' };
+  mp.remotePlayers[id] = { sprite, tag, targetX: x, targetY: y, anim: anim || 'idle_down', name: displayName };
 }
 
 function removeRemote(scene, id) {
@@ -92,7 +123,8 @@ function removeRemote(scene, id) {
 }
 
 function syncCount(scene) {
-  const count = Object.keys(scene._mp.remotePlayers).length + 1;
+  const mp = scene._mp;
+  const count = mp.playerListData.length > 0 ? mp.playerListData.length : Object.keys(mp.remotePlayers).length + 1;
   if (scene.playerCountText) scene.playerCountText.setText(`Players: ${count}`);
 }
 
@@ -146,7 +178,8 @@ export function tickChallenge(scene, ePressed, qPressed) {
   if (mp.challengeState === ST_IDLE) {
     const nearId = findNearest(scene, scene.player.x, scene.player.y);
     if (nearId) {
-      if (scene.promptText) scene.promptText.setText(`[E] Duel Player ${nearId}`);
+      const nearName = mp.remotePlayers[nearId]?.name || ('Player ' + nearId);
+      if (scene.promptText) scene.promptText.setText(`[E] Duel ${nearName}`);
       if (ePressed && scene.ws?.readyState === WebSocket.OPEN) {
         mp.challengeState = ST_CHALLENGING;
         mp.challengePeer = nearId;
@@ -159,7 +192,8 @@ export function tickChallenge(scene, ePressed, qPressed) {
   }
 
   if (mp.challengeState === ST_CHALLENGING) {
-    if (scene.promptText) scene.promptText.setText(`Waiting for Player ${mp.challengePeer}...`);
+    const peerName = mp.remotePlayers[mp.challengePeer]?.name || ('Player ' + mp.challengePeer);
+    if (scene.promptText) scene.promptText.setText(`Waiting for ${peerName}...`);
     if (!mp.challengeTimeout) {
       mp.challengeTimeout = scene.time.delayedCall(15000, () => {
         if (mp.challengeState === ST_CHALLENGING) { mp.challengeState = ST_IDLE; mp.challengePeer = null; showStatus(scene, 'Duel request timed out', 2000); }
@@ -170,7 +204,8 @@ export function tickChallenge(scene, ePressed, qPressed) {
   }
 
   if (mp.challengeState === ST_CHALLENGED) {
-    if (scene.promptText) scene.promptText.setText(`Player ${mp.challengePeer} wants to duel! [E] Accept  [Q] Decline`);
+    const peerName = mp.remotePlayers[mp.challengePeer]?.name || ('Player ' + mp.challengePeer);
+    if (scene.promptText) scene.promptText.setText(`${peerName} wants to duel! [E] Accept  [Q] Decline`);
     if (ePressed && scene.ws?.readyState === WebSocket.OPEN) {
       scene.ws.send(JSON.stringify({ type: 'accept', fromId: mp.challengePeer }));
       showStatus(scene, 'Accepted! Starting duel...', 0);
@@ -194,6 +229,7 @@ function launchPvp(scene) {
     ws: scene.ws, myId: scene.myId,
     playerX: scene.player.x, playerY: scene.player.y,
     returnTo: scene._mp.returnScene,
+    username: scene._mp.username,
     returnData: scene._pvpReturnData ? scene._pvpReturnData() : {}
   });
 }

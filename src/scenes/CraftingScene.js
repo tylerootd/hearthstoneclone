@@ -115,6 +115,7 @@ export default class CraftingScene extends Phaser.Scene {
       };
       if (this.returnData.ws) sceneData.ws = this.returnData.ws;
       if (this.returnData.myId) sceneData.myId = this.returnData.myId;
+      if (this.returnData.username) sceneData.username = this.returnData.username;
       this.scene.start(target, sceneData);
     });
   }

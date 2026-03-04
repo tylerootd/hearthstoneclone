@@ -24,7 +24,8 @@ export default class PvpBattleScene extends Phaser.Scene {
     this.ws = data.ws;
     this.myId = data.myId;
     this.returnScene = data.returnTo || 'MmoMap';
-    this.returnData = { playerX: data.playerX, playerY: data.playerY, ...(data.returnData || {}) };
+    this._username = data.returnData?.username || data.username || 'Player';
+    this.returnData = { playerX: data.playerX, playerY: data.playerY, username: this._username, ...(data.returnData || {}) };
     this.state = null;
     this.selecting = null;
     this.targetMode = false;
@@ -697,7 +698,8 @@ export default class PvpBattleScene extends Phaser.Scene {
   returnToMap() {
     this.scene.start(this.returnScene, {
       ws: this.ws, myId: this.myId,
-      playerX: this.returnData.playerX, playerY: this.returnData.playerY
+      playerX: this.returnData.playerX, playerY: this.returnData.playerY,
+      username: this._username
     });
   }
 

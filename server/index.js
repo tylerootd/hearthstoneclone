@@ -212,8 +212,19 @@ function broadcastState(b) {
 
 function roomSnap(room) {
   const snap = {};
-  players.forEach((p, pid) => { if (p.room === room) snap[pid] = { x: p.x, y: p.y, anim: p.anim }; });
+  players.forEach((p, pid) => { if (p.room === room) snap[pid] = { x: p.x, y: p.y, anim: p.anim, name: p.name }; });
   return snap;
+}
+
+function playerList(room) {
+  const list = [];
+  players.forEach((p, pid) => { if (p.room === room) list.push({ id: pid, name: p.name }); });
+  return list;
+}
+
+function broadcastPlayerList(room) {
+  const list = playerList(room);
+  broadcastToRoom(room, { type: 'player_list', players: list, count: list.length });
 }
 
 function broadcastToRoom(room, msg, exclude) {
@@ -223,11 +234,11 @@ function broadcastToRoom(room, msg, exclude) {
 
 wss.on('connection', (ws) => {
   const id = String(nextId++);
-  players.set(id, { x: 352, y: 1216, anim: 'idle_down', room: 'mmo', deckCards: null, artifacts: [], ws, battleId: null });
+  players.set(id, { x: 352, y: 1216, anim: 'idle_down', room: 'mmo', name: 'Player ' + id, deckCards: null, artifacts: [], ws, battleId: null });
   console.log(`[+] Player ${id} joined (${players.size} online)`);
 
   send(ws, { type: 'welcome', id, players: roomSnap('mmo') });
-  broadcastToRoom('mmo', { type: 'join', id, x: 352, y: 1216, anim: 'idle_down' }, ws);
+  broadcastToRoom('mmo', { type: 'join', id, x: 352, y: 1216, anim: 'idle_down', name: 'Player ' + id }, ws);
 
   ws.on('message', (raw) => {
     try {
@@ -235,17 +246,34 @@ wss.on('connection', (ws) => {
       const me = players.get(id);
       if (!me) return;
 
+      if (msg.type === 'set_name') {
+        const raw = (msg.name || '').replace(/[^a-zA-Z0-9_ -]/g, '').trim().slice(0, 16);
+        me.name = raw || ('Player ' + id);
+        broadcastToRoom(me.room, { type: 'name_update', id, name: me.name });
+        broadcastPlayerList(me.room);
+        return;
+      }
+
+      if (msg.type === 'chat') {
+        const text = (msg.text || '').trim().slice(0, 200);
+        if (!text) return;
+        broadcastToRoom(me.room, { type: 'chat', id, name: me.name, text });
+        return;
+      }
+
       if (msg.type === 'join_room') {
         const oldRoom = me.room;
         const newRoom = msg.room || 'mmo';
         if (oldRoom !== newRoom) {
           broadcastToRoom(oldRoom, { type: 'leave', id }, ws);
+          broadcastPlayerList(oldRoom);
           me.room = newRoom;
           console.log(`[R] Player ${id}: ${oldRoom} → ${newRoom}`);
         }
         me.x = msg.x || 0; me.y = msg.y || 0;
         send(ws, { type: 'welcome', id, players: roomSnap(newRoom) });
-        broadcastToRoom(newRoom, { type: 'join', id, x: me.x, y: me.y, anim: me.anim }, ws);
+        broadcastToRoom(newRoom, { type: 'join', id, x: me.x, y: me.y, anim: me.anim, name: me.name }, ws);
+        broadcastPlayerList(newRoom);
         return;
       }
 
@@ -348,6 +376,7 @@ wss.on('connection', (ws) => {
     players.delete(id);
     console.log(`[-] Player ${id} left (${players.size} online)`);
     broadcastToRoom(room, { type: 'leave', id });
+    broadcastPlayerList(room);
   });
 });
 

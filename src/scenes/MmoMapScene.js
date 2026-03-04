@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
-import { initMp, setupWs, joinRoom, sendPos, interpRemote, tickChallenge, cleanupMp } from '../multiplayer/mpHelper.js';
+import { initMp, setupWs, joinRoom, sendPos, interpRemote, tickChallenge, cleanupMp, sendName, sendChat } from '../multiplayer/mpHelper.js';
 
 const SPEED = 160;
 const ZOOM = 2;
@@ -17,8 +17,9 @@ export default class MmoMapScene extends Phaser.Scene {
     this.myId = null;
     this._keepWs = false;
     this.escPending = false;
+    this._username = data?.username || 'Player';
 
-    initMp(this, { returnScene: 'MmoMap', spriteScale: 1.5, tagOffset: -18 });
+    initMp(this, { returnScene: 'MmoMap', spriteScale: 1.5, tagOffset: -18, username: this._username });
 
     this.buildMap();
     this.createAnims();
@@ -31,6 +32,7 @@ export default class MmoMapScene extends Phaser.Scene {
       this.ws = data.ws;
       this.myId = data.myId;
       setupWs(this);
+      sendName(this, this._username);
       const px = Math.round(data.playerX || 352);
       const py = Math.round(data.playerY || 1216);
       joinRoom(this, 'mmo', px, py);
@@ -47,7 +49,11 @@ export default class MmoMapScene extends Phaser.Scene {
       color: '#ff00aa', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5).setDepth(12);
 
-    this.events.on('shutdown', () => { this.destroyButtons(); this.cleanup(); });
+    this._chatEl = null;
+    this._onChat = () => this._refreshChat();
+    this._onPlayerList = () => this._refreshChat();
+
+    this.events.on('shutdown', () => { this.destroyButtons(); this._destroyChat(); this.cleanup(); });
   }
 
   /* ──────── Tiled map ──────── */
@@ -140,7 +146,7 @@ export default class MmoMapScene extends Phaser.Scene {
       this.scene.start('Crafting', {
         returnTo: 'MmoMap',
         returnPlayerX: this.player.x, returnPlayerY: this.player.y,
-        ws: this.ws, myId: this.myId
+        ws: this.ws, myId: this.myId, username: this._username
       });
     });
   }
@@ -156,8 +162,12 @@ export default class MmoMapScene extends Phaser.Scene {
       ...FONT, fontSize: '11px', color: '#aaccee', stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(50);
 
-    this.add.text(8, 40, 'C = craft  |  ESC = exit', {
-      ...FONT, fontSize: '10px', color: '#999', stroke: '#000', strokeThickness: 2
+    this.add.text(8, 40, this._username, {
+      ...FONT, fontSize: '9px', color: '#e6b422', stroke: '#000', strokeThickness: 2
+    }).setScrollFactor(0).setDepth(50);
+
+    this.add.text(8, 56, 'C = craft  |  ESC = exit', {
+      ...FONT, fontSize: '8px', color: '#777', stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(50);
 
     const cam = this.cameras.main;
@@ -186,6 +196,7 @@ export default class MmoMapScene extends Phaser.Scene {
       setupWs(this);
 
       this.ws.onopen = () => {
+        sendName(this, this._username);
         const deckIds = loadDeck() || [];
         const cards = deckIds.map(id => getCardById(id)).filter(Boolean);
         const artifacts = loadArtifacts() || [];
@@ -218,7 +229,8 @@ export default class MmoMapScene extends Phaser.Scene {
           this._keepWs = true;
           this.scene.start('YakuzaHideout', {
             ws: this.ws, myId: this.myId,
-            playerX: this.player.x, playerY: this.player.y
+            playerX: this.player.x, playerY: this.player.y,
+            username: this._username
           });
         });
       }
@@ -229,6 +241,13 @@ export default class MmoMapScene extends Phaser.Scene {
 
   update(time) {
     if (!this.player || this.escPending) return;
+    const chatFocused = document.activeElement?.tagName === 'INPUT';
+    if (chatFocused) {
+      this.player.body.setVelocity(0, 0);
+      sendPos(this, time, this.player.x, this.player.y, 'idle_down');
+      interpRemote(this);
+      return;
+    }
 
     let vx = 0, vy = 0;
     if (this.cursors.left.isDown  || this.wasd.A.isDown) { vx = -SPEED; this.playerDir = 'left'; }
@@ -298,9 +317,10 @@ export default class MmoMapScene extends Phaser.Scene {
       this.scene.start('Crafting', {
         returnTo: 'MmoMap',
         returnPlayerX: this.player.x, returnPlayerY: this.player.y,
-        ws: this.ws, myId: this.myId
+        ws: this.ws, myId: this.myId, username: this._username
       });
     });
+    makeBtn('CHAT', '#333355', () => this._toggleChat());
 
     bar.appendChild(btnRow);
     document.body.appendChild(bar);
@@ -310,6 +330,7 @@ export default class MmoMapScene extends Phaser.Scene {
   destroyButtons() {
     if (this.btnBar) { this.btnBar.remove(); this.btnBar = null; }
     if (this.confirmEl) { this.confirmEl.remove(); this.confirmEl = null; }
+    this._destroyChat();
   }
 
   tryExit() {
@@ -361,6 +382,118 @@ export default class MmoMapScene extends Phaser.Scene {
     box.appendChild(btnRow);
     document.body.appendChild(box);
     this.confirmEl = box;
+  }
+
+  /* ──────── chat panel (DOM) ──────── */
+
+  _toggleChat() {
+    if (this._chatEl) { this._destroyChat(); return; }
+    const el = document.createElement('div');
+    Object.assign(el.style, {
+      position: 'fixed', bottom: '10px', right: '10px', width: '320px', height: '420px',
+      background: '#0a0e1a', border: '2px solid #3355aa', borderRadius: '8px',
+      display: 'flex', flexDirection: 'column', zIndex: '999',
+      fontFamily: '"Press Start 2P", monospace', overflow: 'hidden'
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '8px 12px', background: '#111828', borderBottom: '1px solid #334'
+    });
+    const title = document.createElement('span');
+    title.style.color = '#44ffaa'; title.style.fontSize = '11px';
+    title.textContent = 'CHAT & PLAYERS';
+    header.appendChild(title);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    Object.assign(closeBtn.style, {
+      background: '#552222', color: '#ff6666', border: 'none', cursor: 'pointer',
+      fontFamily: 'inherit', fontSize: '10px', padding: '2px 8px', borderRadius: '3px'
+    });
+    closeBtn.addEventListener('click', () => this._destroyChat());
+    header.appendChild(closeBtn);
+    el.appendChild(header);
+
+    const playerBox = document.createElement('div');
+    playerBox.id = 'mp-player-list';
+    Object.assign(playerBox.style, {
+      padding: '6px 10px', borderBottom: '1px solid #334', maxHeight: '90px',
+      overflowY: 'auto', fontSize: '9px', color: '#88aadd', lineHeight: '1.6'
+    });
+    el.appendChild(playerBox);
+
+    const msgBox = document.createElement('div');
+    msgBox.id = 'mp-chat-messages';
+    Object.assign(msgBox.style, {
+      flex: '1', overflowY: 'auto', padding: '8px 10px', fontSize: '9px',
+      color: '#ccc', lineHeight: '1.6'
+    });
+    el.appendChild(msgBox);
+
+    const inputRow = document.createElement('div');
+    Object.assign(inputRow.style, {
+      display: 'flex', padding: '6px', borderTop: '1px solid #334', gap: '4px'
+    });
+    const input = document.createElement('input');
+    input.type = 'text'; input.maxLength = 200; input.placeholder = 'Type a message...';
+    Object.assign(input.style, {
+      flex: '1', background: '#111828', color: '#fff', border: '1px solid #335',
+      padding: '6px 8px', fontSize: '10px', fontFamily: 'inherit', borderRadius: '3px', outline: 'none'
+    });
+    const sendBtn = document.createElement('button');
+    sendBtn.textContent = '>';
+    Object.assign(sendBtn.style, {
+      background: '#226644', color: '#fff', border: 'none', cursor: 'pointer',
+      padding: '6px 12px', fontFamily: 'inherit', fontSize: '10px', borderRadius: '3px'
+    });
+    const doSend = () => {
+      const text = input.value.trim();
+      if (!text) return;
+      sendChat(this, text);
+      input.value = '';
+      input.focus();
+    };
+    sendBtn.addEventListener('click', doSend);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSend(); e.stopPropagation(); });
+    input.addEventListener('keyup', (e) => e.stopPropagation());
+    input.addEventListener('keypress', (e) => e.stopPropagation());
+    inputRow.appendChild(input);
+    inputRow.appendChild(sendBtn);
+    el.appendChild(inputRow);
+
+    document.body.appendChild(el);
+    this._chatEl = el;
+    this._refreshChat();
+    input.focus();
+  }
+
+  _refreshChat() {
+    if (!this._chatEl) return;
+    const mp = this._mp;
+
+    const playerBox = this._chatEl.querySelector('#mp-player-list');
+    if (playerBox) {
+      const list = mp.playerListData.length ? mp.playerListData :
+        [{ id: this.myId, name: this._username }, ...Object.entries(mp.remotePlayers).map(([id, r]) => ({ id, name: r.name }))];
+      playerBox.innerHTML = `<div style="color:#44ffaa;margin-bottom:4px">PLAYERS (${list.length})</div>` +
+        list.map(p => {
+          const isMe = p.id === this.myId;
+          return `<div style="color:${isMe ? '#44ffaa' : '#88aadd'}">${isMe ? '> ' : ''}${p.name || 'Player ' + p.id}${isMe ? ' (you)' : ''}</div>`;
+        }).join('');
+    }
+
+    const msgBox = this._chatEl.querySelector('#mp-chat-messages');
+    if (msgBox) {
+      msgBox.innerHTML = mp.chatMessages.map(m =>
+        `<div><span style="color:#44ffaa">${m.name}:</span> <span style="color:#ddd">${m.text}</span></div>`
+      ).join('');
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+  }
+
+  _destroyChat() {
+    if (this._chatEl) { this._chatEl.remove(); this._chatEl = null; }
   }
 
   /* ──────── cleanup ──────── */

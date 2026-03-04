@@ -54,6 +54,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
   create(data) {
     this.ws = data.ws;
     this.myId = data.myId;
+    this._username = data.username || 'Player';
     this.returnData = { playerX: data.playerX, playerY: data.playerY };
     this.talkIndex = {};
     this.dialogueLocked = false;
@@ -61,7 +62,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.activeNpc = null;
     this._keepWs = false;
 
-    initMp(this, { returnScene: 'YakuzaHideout', spriteScale: 2.5, tagOffset: -26 });
+    initMp(this, { returnScene: 'YakuzaHideout', spriteScale: 2.5, tagOffset: -26, username: this._username });
 
     this._pvpReturnData = () => ({
       playerX: this.returnData.playerX,
@@ -513,7 +514,8 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
         ws: this.ws,
         myId: this.myId,
         playerX: this.returnData.playerX,
-        playerY: this.returnData.playerY
+        playerY: this.returnData.playerY,
+        username: this._username
       });
     });
   }
