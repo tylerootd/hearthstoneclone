@@ -61,17 +61,24 @@ export default class HubScene extends Phaser.Scene {
     });
     document.body.appendChild(overlay);
 
+    const canvas = this.game.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const boxLeft = rect.left + 10;
+    const boxWidth = Math.min(320, (rect.width * 0.34));
+
     const box = document.createElement('div');
     Object.assign(box.style, {
-      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-      background: '#0a1a2e', border: '2px solid #44ffaa', borderRadius: '8px',
-      padding: '24px 32px', zIndex: '1000', textAlign: 'center',
+      position: 'fixed', top: '50%', left: boxLeft + 'px',
+      transform: 'translateY(-50%)',
+      width: boxWidth + 'px',
+      background: '#0a1a2e', border: '2px solid #44ffaa', borderRadius: '10px',
+      padding: '36px 28px', zIndex: '1000', textAlign: 'center',
       fontFamily: '"Press Start 2P", monospace'
     });
 
     const title = document.createElement('div');
     title.textContent = 'ENTER USERNAME';
-    Object.assign(title.style, { color: '#44ffaa', fontSize: '14px', marginBottom: '16px' });
+    Object.assign(title.style, { color: '#44ffaa', fontSize: '16px', marginBottom: '24px' });
     box.appendChild(title);
 
     const input = document.createElement('input');
@@ -79,17 +86,17 @@ export default class HubScene extends Phaser.Scene {
     input.maxLength = 16;
     input.placeholder = 'Your name...';
     Object.assign(input.style, {
-      width: '200px', padding: '8px 12px', fontSize: '14px',
+      width: '90%', padding: '12px 14px', fontSize: '16px',
       fontFamily: '"Press Start 2P", monospace', background: '#111828',
       color: '#fff', border: '2px solid #335566', borderRadius: '4px',
-      outline: 'none', textAlign: 'center', marginBottom: '16px', display: 'block',
-      marginLeft: 'auto', marginRight: 'auto'
+      outline: 'none', textAlign: 'center', marginBottom: '24px', display: 'block',
+      marginLeft: 'auto', marginRight: 'auto', boxSizing: 'border-box'
     });
     box.appendChild(input);
 
     const btnRow = document.createElement('div');
     btnRow.style.display = 'flex';
-    btnRow.style.gap = '12px';
+    btnRow.style.gap = '16px';
     btnRow.style.justifyContent = 'center';
 
     const makeBtn = (text, bg, fn) => {
@@ -97,7 +104,7 @@ export default class HubScene extends Phaser.Scene {
       b.textContent = text;
       Object.assign(b.style, {
         background: bg, color: '#fff', border: 'none',
-        padding: '8px 24px', fontSize: '12px', fontFamily: 'inherit',
+        padding: '12px 32px', fontSize: '14px', fontFamily: 'inherit',
         cursor: 'pointer', borderRadius: '4px'
       });
       b.addEventListener('click', fn);
