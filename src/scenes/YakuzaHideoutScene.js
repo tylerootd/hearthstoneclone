@@ -57,6 +57,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.talkIndex = {};
     this.dialogueLocked = false;
     this.duelPromptActive = false;
+    this.activeNpc = null;
 
     this.generateTextures();
     this.drawRoom();
@@ -238,8 +239,13 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       RIGHT: this.input.keyboard.addKey('RIGHT')
     };
     this.keyE = this.input.keyboard.addKey('E');
+    this.keySpace = this.input.keyboard.addKey('SPACE');
     this.keyEPrev = false;
+    this.keySpacePrev = false;
     this.input.keyboard.on('keydown-ESC', () => {
+      if (!this.duelPromptActive) this.exitToMap();
+    });
+    this.input.keyboard.on('keydown-Q', () => {
       if (!this.duelPromptActive) this.exitToMap();
     });
   }
@@ -251,9 +257,19 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       ...FONT, fontSize: '14px', fontStyle: 'bold', color: '#ff00aa',
       stroke: '#000', strokeThickness: 3
     }).setDepth(50);
-    this.add.text(16, 32, 'ESC = leave  |  E = interact', {
+    this.add.text(16, 32, 'E / SPACE = interact  |  Q = leave', {
       ...FONT, fontSize: '10px', color: '#aaa', stroke: '#000', strokeThickness: 2
     }).setDepth(50);
+
+    const exitBtn = this.add.rectangle(W - 70, 22, 120, 30, 0x441111, 0.9)
+      .setStrokeStyle(2, 0xff4444).setDepth(50).setInteractive({ useHandCursor: true });
+    this.add.text(W - 70, 22, 'EXIT [Q]', {
+      ...FONT, fontSize: '12px', fontStyle: 'bold', color: '#ff6666',
+      stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(51);
+    exitBtn.on('pointerover', () => exitBtn.setFillStyle(0x662222));
+    exitBtn.on('pointerout', () => exitBtn.setFillStyle(0x441111));
+    exitBtn.on('pointerdown', () => this.exitToMap());
 
     this.promptText = this.add.text(W / 2, H - 20, '', {
       ...FONT, fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3
@@ -264,6 +280,15 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.dialogueText = this.add.text(W / 2, H - 80, '', {
       ...FONT, fontSize: '13px', color: '#ff88cc', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5).setDepth(50);
+
+    this.skipBtnBg = this.add.rectangle(W / 2 + 310, H - 80, 80, 30, 0x332233, 0.9)
+      .setStrokeStyle(1, 0xff00aa).setDepth(51).setInteractive({ useHandCursor: true }).setVisible(false);
+    this.skipBtnText = this.add.text(W / 2 + 310, H - 80, 'SKIP ▶▶', {
+      ...FONT, fontSize: '9px', fontStyle: 'bold', color: '#ff88cc'
+    }).setOrigin(0.5).setDepth(52).setVisible(false);
+    this.skipBtnBg.on('pointerover', () => this.skipBtnBg.setFillStyle(0x553355));
+    this.skipBtnBg.on('pointerout', () => this.skipBtnBg.setFillStyle(0x332233));
+    this.skipBtnBg.on('pointerdown', () => this.skipDialogue());
   }
 
   /* ═══════ DIALOGUE & DUEL PROMPT ═══════ */
@@ -271,6 +296,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
   talkToNpc(npc) {
     if (this.dialogueLocked) return;
     this.dialogueLocked = true;
+    this.activeNpc = npc;
 
     const idx = this.talkIndex[npc.id];
     const isLastLine = idx >= npc.lines.length;
@@ -280,19 +306,40 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.dialogueBg.setVisible(true);
     this.dialogueText.setText(`${npc.name}: "${line}"`);
 
+    if (!isLastLine) {
+      this.skipBtnBg.setVisible(true);
+      this.skipBtnText.setVisible(true);
+    } else {
+      this.skipBtnBg.setVisible(false);
+      this.skipBtnText.setVisible(false);
+    }
+
     if (this.dialogueTimer) this.dialogueTimer.destroy();
 
     if (isLastLine) {
-      this.dialogueTimer = this.time.delayedCall(800, () => this.showDuelPrompt(npc));
+      this.dialogueTimer = this.time.delayedCall(600, () => this.showDuelPrompt(npc));
     } else {
-      this.dialogueTimer = this.time.delayedCall(3000, () => {
-        this.dialogueLocked = false;
-      });
+      this.dialogueLocked = false;
     }
+  }
+
+  advanceDialogue() {
+    if (!this.activeNpc || this.duelPromptActive) return;
+    this.talkToNpc(this.activeNpc);
+  }
+
+  skipDialogue() {
+    if (!this.activeNpc || this.duelPromptActive) return;
+    if (this.dialogueTimer) this.dialogueTimer.destroy();
+    this.talkIndex[this.activeNpc.id] = this.activeNpc.lines.length;
+    this.dialogueLocked = false;
+    this.talkToNpc(this.activeNpc);
   }
 
   showDuelPrompt(npc) {
     this.duelPromptActive = true;
+    this.skipBtnBg.setVisible(false);
+    this.skipBtnText.setVisible(false);
 
     if (this.promptGroup) this.promptGroup.forEach(o => o.destroy());
     this.promptGroup = [];
@@ -333,8 +380,11 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.promptGroup = [];
     this.duelPromptActive = false;
     this.dialogueLocked = false;
+    this.activeNpc = null;
     this.dialogueBg.setVisible(false);
     this.dialogueText.setText('');
+    this.skipBtnBg.setVisible(false);
+    this.skipBtnText.setVisible(false);
   }
 
   startDuel(npc) {
@@ -385,7 +435,15 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     if (this.anims.exists(animKey)) this.player.play(animKey, true);
 
     const eTap = this.keyE.isDown && !this.keyEPrev;
+    const spaceTap = this.keySpace.isDown && !this.keySpacePrev;
     this.keyEPrev = this.keyE.isDown;
+    this.keySpacePrev = this.keySpace.isDown;
+    const interact = eTap || spaceTap;
+
+    if (this.activeNpc && interact) {
+      this.advanceDialogue();
+      return;
+    }
 
     let closestNpc = null;
     let closestDist = Infinity;
@@ -395,10 +453,17 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     }
 
     if (closestNpc) {
-      this.promptText.setText(`[E] Talk to ${closestNpc.name}`);
-      if (eTap) this.talkToNpc(closestNpc);
+      this.promptText.setText(`[E / SPACE] Talk to ${closestNpc.name}`);
+      if (interact) this.talkToNpc(closestNpc);
     } else {
       this.promptText.setText('');
+      if (this.activeNpc) {
+        this.activeNpc = null;
+        this.dialogueBg.setVisible(false);
+        this.dialogueText.setText('');
+        this.skipBtnBg.setVisible(false);
+        this.skipBtnText.setVisible(false);
+      }
     }
 
     if (this.player.y > ROOM_Y + ROOM_H - 15) {
@@ -407,6 +472,8 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
   }
 
   exitToMap() {
+    if (this._exiting) return;
+    this._exiting = true;
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.time.delayedCall(300, () => {
       this.scene.start('MmoMap', {
