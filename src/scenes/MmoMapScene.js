@@ -1,36 +1,24 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
+import { initMp, setupWs, joinRoom, sendPos, interpRemote, tickChallenge, cleanupMp } from '../multiplayer/mpHelper.js';
 
 const SPEED = 160;
 const ZOOM = 2;
 const FONT = { fontFamily: 'Arial, sans-serif' };
-const SEND_RATE = 50;
-const INTERACT_DIST = 48;
 const HIDEOUT_DOOR = { x: 640, y: 640 };
 const HIDEOUT_DETECT = 50;
-
-// Challenge states
-const ST_IDLE = 0;
-const ST_CHALLENGING = 1;
-const ST_CHALLENGED = 2;
 
 export default class MmoMapScene extends Phaser.Scene {
   constructor() { super('MmoMap'); }
 
   create(data) {
-    this.remotePlayers = {};
     this.ws = null;
     this.myId = null;
-    this.lastSendTime = 0;
-    this.lastSentX = 0;
-    this.lastSentY = 0;
-    this.lastSentAnim = '';
-    this.challengeState = ST_IDLE;
-    this.challengePeer = null; // id of the player we're challenging or who challenged us
-    this.nearPlayerId = null;
+    this._keepWs = false;
+    this.escPending = false;
 
-    this.keepWs = false;
+    initMp(this, { returnScene: 'MmoMap', spriteScale: 1.5, tagOffset: -18 });
 
     this.buildMap();
     this.createAnims();
@@ -42,23 +30,20 @@ export default class MmoMapScene extends Phaser.Scene {
     if (data?.ws && data.ws.readyState === WebSocket.OPEN) {
       this.ws = data.ws;
       this.myId = data.myId;
-      this.ws.onmessage = (event) => this.handleServerMessage(JSON.parse(event.data));
-      this.ws.onclose = () => { if (this.playerCountText) this.playerCountText.setText('Disconnected'); };
-      this.challengeState = ST_IDLE;
-      this.challengePeer = null;
+      setupWs(this);
       const px = Math.round(data.playerX || 352);
       const py = Math.round(data.playerY || 1216);
-      this.ws.send(JSON.stringify({ type: 'join_room', room: 'mmo', x: px, y: py }));
+      joinRoom(this, 'mmo', px, py);
     } else {
       this.connectToServer();
     }
 
     if (this.textures.exists('dragons_den_building')) {
-      this.denBuilding = this.add.image(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 20, 'dragons_den_building')
+      this.add.image(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 20, 'dragons_den_building')
         .setScale(0.55).setDepth(4);
     }
     this.add.text(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 60, "DRAGON'S DEN", {
-      fontFamily: 'Arial, sans-serif', fontSize: '7px', fontStyle: 'bold',
+      ...FONT, fontSize: '7px', fontStyle: 'bold',
       color: '#ff00aa', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5).setDepth(12);
 
@@ -147,18 +132,15 @@ export default class MmoMapScene extends Phaser.Scene {
     this.keyQ = this.input.keyboard.addKey('Q');
     this.keyEDown = false;
     this.keyQDown = false;
-    this.escPending = false;
     this.input.keyboard.on('keydown-ESC', () => this.tryExit());
     this.input.keyboard.addKey('C').on('down', () => {
       if (this.escPending) return;
       this.destroyButtons();
-      this.cleanup();
+      this._keepWs = true;
       this.scene.start('Crafting', {
         returnTo: 'MmoMap',
-        returnPlayerX: this.player.x,
-        returnPlayerY: this.player.y,
-        ws: this.ws,
-        myId: this.myId
+        returnPlayerX: this.player.x, returnPlayerY: this.player.y,
+        ws: this.ws, myId: this.myId
       });
     });
   }
@@ -166,7 +148,7 @@ export default class MmoMapScene extends Phaser.Scene {
   /* ──────── HUD ──────── */
 
   drawHud() {
-    this.add.text(8, 4, 'MMO MAP', {
+    this.add.text(8, 4, 'MULTIPLAYER', {
       ...FONT, fontSize: '14px', color: '#44ffaa', stroke: '#000', strokeThickness: 3
     }).setScrollFactor(0).setDepth(50);
 
@@ -193,22 +175,6 @@ export default class MmoMapScene extends Phaser.Scene {
     this.createButtons();
   }
 
-  updatePlayerCount() {
-    const count = Object.keys(this.remotePlayers).length + 1;
-    if (this.playerCountText) {
-      this.playerCountText.setText(`Players online: ${count}`);
-    }
-  }
-
-  showStatus(msg, duration) {
-    if (this.statusText) this.statusText.setText(msg);
-    if (duration) {
-      this.time.delayedCall(duration, () => {
-        if (this.statusText) this.statusText.setText('');
-      });
-    }
-  }
-
   /* ──────── WebSocket connection ──────── */
 
   connectToServer() {
@@ -218,22 +184,13 @@ export default class MmoMapScene extends Phaser.Scene {
       this.ws = new WebSocket(serverUrl);
 
       this.ws.onopen = () => {
-        console.log('[MMO] Connected');
         const deckIds = loadDeck() || [];
         const cards = deckIds.map(id => getCardById(id)).filter(Boolean);
         const artifacts = loadArtifacts() || [];
         this.ws.send(JSON.stringify({ type: 'deck', cards, artifacts }));
       };
 
-      this.ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        this.handleServerMessage(msg);
-      };
-
-      this.ws.onclose = () => {
-        console.log('[MMO] Disconnected');
-        if (this.playerCountText) this.playerCountText.setText('Disconnected');
-      };
+      setupWs(this);
 
       this.ws.onerror = () => {
         if (this.playerCountText) this.playerCountText.setText('Server offline - solo mode');
@@ -241,90 +198,6 @@ export default class MmoMapScene extends Phaser.Scene {
 
     } catch (e) {
       if (this.playerCountText) this.playerCountText.setText('Server offline - solo mode');
-    }
-  }
-
-  handleServerMessage(msg) {
-    if (msg.type === 'welcome') {
-      this.myId = msg.id;
-      console.log('[MMO] My ID:', msg.id);
-      for (const [pid, pdata] of Object.entries(msg.players)) {
-        if (pid !== this.myId) {
-          this.addRemotePlayer(pid, pdata.x, pdata.y, pdata.anim);
-        }
-      }
-      this.updatePlayerCount();
-    }
-
-    else if (msg.type === 'join') {
-      this.addRemotePlayer(msg.id, msg.x, msg.y, msg.anim);
-      this.updatePlayerCount();
-    }
-
-    else if (msg.type === 'move') {
-      const r = this.remotePlayers[msg.id];
-      if (r) {
-        r.targetX = msg.x;
-        r.targetY = msg.y;
-        r.anim = msg.anim || 'idle_down';
-      }
-    }
-
-    else if (msg.type === 'leave') {
-      // If the player who left was our challenge peer, reset state
-      if (this.challengePeer === msg.id) {
-        this.challengeState = ST_IDLE;
-        this.challengePeer = null;
-        this.showStatus('Opponent disconnected', 2000);
-      }
-      this.removeRemotePlayer(msg.id);
-      this.updatePlayerCount();
-    }
-
-    else if (msg.type === 'challenged') {
-      // Someone is challenging us
-      if (this.challengeState === ST_IDLE) {
-        this.challengeState = ST_CHALLENGED;
-        this.challengePeer = msg.fromId;
-        console.log('[MMO] Challenged by Player', msg.fromId);
-      }
-    }
-
-    else if (msg.type === 'declined') {
-      if (this.challengeState === ST_CHALLENGING && this.challengePeer === msg.byId) {
-        this.challengeState = ST_IDLE;
-        this.challengePeer = null;
-        this.showStatus('Duel declined', 2000);
-      }
-    }
-
-    else if (msg.type === 'pvp_start') {
-      console.log('[MMO] PvP battle starting, side:', msg.side);
-      this.startPvpBattle();
-    }
-  }
-
-  /* ──────── remote players ──────── */
-
-  addRemotePlayer(id, x, y, anim) {
-    if (this.remotePlayers[id]) return;
-
-    const sprite = this.add.sprite(x, y, 'ninja_npc_green', 0)
-      .setDepth(5).setScale(1.5);
-
-    const tag = this.add.text(x, y - 18, `Player ${id}`, {
-      ...FONT, fontSize: '7px', color: '#aaffaa', stroke: '#000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(11);
-
-    this.remotePlayers[id] = { sprite, tag, targetX: x, targetY: y, anim: anim || 'idle_down' };
-  }
-
-  removeRemotePlayer(id) {
-    const remote = this.remotePlayers[id];
-    if (remote) {
-      remote.sprite.destroy();
-      remote.tag.destroy();
-      delete this.remotePlayers[id];
     }
   }
 
@@ -341,7 +214,7 @@ export default class MmoMapScene extends Phaser.Scene {
       onComplete: () => {
         cam.fadeOut(400, 0, 0, 0);
         this.time.delayedCall(400, () => {
-          this.keepWs = true;
+          this._keepWs = true;
           this.scene.start('YakuzaHideout', {
             ws: this.ws, myId: this.myId,
             playerX: this.player.x, playerY: this.player.y
@@ -351,43 +224,11 @@ export default class MmoMapScene extends Phaser.Scene {
     });
   }
 
-  /* ──────── PvP battle ──────── */
-
-  startPvpBattle() {
-    this.keepWs = true;
-    this.scene.start('PvpBattle', {
-      ws: this.ws,
-      myId: this.myId,
-      playerX: this.player.x,
-      playerY: this.player.y
-    });
-  }
-
-  /* ──────── find nearest remote player ──────── */
-
-  findNearestPlayer() {
-    let closest = null;
-    let closestDist = INTERACT_DIST;
-
-    for (const [id, r] of Object.entries(this.remotePlayers)) {
-      const d = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, r.sprite.x, r.sprite.y
-      );
-      if (d < closestDist) {
-        closestDist = d;
-        closest = id;
-      }
-    }
-
-    return closest;
-  }
-
   /* ──────── update loop ──────── */
 
   update(time) {
     if (!this.player || this.escPending) return;
 
-    // Movement
     let vx = 0, vy = 0;
     if (this.cursors.left.isDown  || this.wasd.A.isDown) { vx = -SPEED; this.playerDir = 'left'; }
     else if (this.cursors.right.isDown || this.wasd.D.isDown) { vx = SPEED; this.playerDir = 'right'; }
@@ -401,97 +242,22 @@ export default class MmoMapScene extends Phaser.Scene {
     const animKey = moving ? 'walk_' + this.playerDir : 'idle_down';
     if (this.anims.exists(animKey)) this.player.play(animKey, true);
 
-    // Send position to server
-    if (this.ws && this.ws.readyState === WebSocket.OPEN && time - this.lastSendTime > SEND_RATE) {
-      const px = Math.round(this.player.x);
-      const py = Math.round(this.player.y);
-      if (px !== this.lastSentX || py !== this.lastSentY || animKey !== this.lastSentAnim) {
-        this.ws.send(JSON.stringify({ type: 'move', x: px, y: py, anim: animKey }));
-        this.lastSentX = px;
-        this.lastSentY = py;
-        this.lastSentAnim = animKey;
-      }
-      this.lastSendTime = time;
-    }
+    sendPos(this, time, this.player.x, this.player.y, animKey);
+    interpRemote(this);
 
-    // Interpolate remote players
-    for (const id of Object.keys(this.remotePlayers)) {
-      const r = this.remotePlayers[id];
-      r.sprite.x = Phaser.Math.Linear(r.sprite.x, r.targetX, 0.25);
-      r.sprite.y = Phaser.Math.Linear(r.sprite.y, r.targetY, 0.25);
-      r.tag.x = r.sprite.x;
-      r.tag.y = r.sprite.y - 18;
-
-      const remoteAnim = 'remote_' + (r.anim || 'idle_down');
-      if (this.anims.exists(remoteAnim)) {
-        r.sprite.play(remoteAnim, true);
-      }
-    }
-
-    // Interaction prompts and input
-    this.updateInteraction();
-  }
-
-  updateInteraction() {
     const ePressed = this.keyE.isDown && !this.keyEDown;
     const qPressed = this.keyQ.isDown && !this.keyQDown;
     this.keyEDown = this.keyE.isDown;
     this.keyQDown = this.keyQ.isDown;
 
-    if (this.challengeState === ST_IDLE) {
-      const nearId = this.findNearestPlayer();
-      this.nearPlayerId = nearId;
-
-      if (nearId) {
-        this.promptText.setText(`[E] Duel Player ${nearId}`);
-        if (ePressed && this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.challengeState = ST_CHALLENGING;
-          this.challengePeer = nearId;
-          this.ws.send(JSON.stringify({ type: 'challenge', targetId: nearId }));
-          this.showStatus('Duel request sent! Waiting...', 0);
-          console.log('[MMO] Sent challenge to', nearId);
-        }
+    const cs = tickChallenge(this, ePressed, qPressed);
+    if (!cs) {
+      const doorDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, HIDEOUT_DOOR.x, HIDEOUT_DOOR.y);
+      if (doorDist < HIDEOUT_DETECT) {
+        this.promptText.setText("[E] Enter Dragon's Den");
+        if (ePressed) { this.enterHideout(); return; }
       } else {
-        const doorDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, HIDEOUT_DOOR.x, HIDEOUT_DOOR.y);
-        if (doorDist < HIDEOUT_DETECT) {
-          this.promptText.setText("[E] Enter Dragon's Den");
-          if (ePressed) { this.enterHideout(); return; }
-        } else {
-          this.promptText.setText('');
-        }
-      }
-    }
-
-    else if (this.challengeState === ST_CHALLENGING) {
-      this.promptText.setText(`Waiting for Player ${this.challengePeer}...`);
-      // Auto-cancel after 15 seconds
-      if (!this._challengeTimeout) {
-        this._challengeTimeout = this.time.delayedCall(15000, () => {
-          if (this.challengeState === ST_CHALLENGING) {
-            this.challengeState = ST_IDLE;
-            this.challengePeer = null;
-            this.showStatus('Duel request timed out', 2000);
-          }
-          this._challengeTimeout = null;
-        });
-      }
-    }
-
-    else if (this.challengeState === ST_CHALLENGED) {
-      this.promptText.setText(`Player ${this.challengePeer} wants to duel! [E] Accept  [Q] Decline`);
-
-      if (ePressed && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'accept', fromId: this.challengePeer }));
-        this.showStatus('Accepted! Starting duel...', 0);
-        console.log('[MMO] Accepted challenge from', this.challengePeer);
-      }
-
-      if (qPressed && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'decline', fromId: this.challengePeer }));
-        this.challengeState = ST_IDLE;
-        this.challengePeer = null;
-        this.showStatus('Duel declined', 2000);
-        if (this._challengeTimeout) { this._challengeTimeout.destroy(); this._challengeTimeout = null; }
+        this.promptText.setText('');
       }
     }
   }
@@ -527,13 +293,11 @@ export default class MmoMapScene extends Phaser.Scene {
     makeBtn('ESC', '#553333', () => this.tryExit());
     makeBtn('CRAFT', '#335533', () => {
       this.destroyButtons();
-      this.keepWs = true;
+      this._keepWs = true;
       this.scene.start('Crafting', {
         returnTo: 'MmoMap',
-        returnPlayerX: this.player.x,
-        returnPlayerY: this.player.y,
-        ws: this.ws,
-        myId: this.myId
+        returnPlayerX: this.player.x, returnPlayerY: this.player.y,
+        ws: this.ws, myId: this.myId
       });
     });
 
@@ -600,20 +364,11 @@ export default class MmoMapScene extends Phaser.Scene {
 
   /* ──────── cleanup ──────── */
 
-  goBack() {
-    this.destroyButtons();
-    this.cleanup();
-    this.scene.start('Hub');
-  }
-
   cleanup() {
-    if (this._challengeTimeout) { this._challengeTimeout.destroy(); this._challengeTimeout = null; }
-    if (this.ws && !this.keepWs) {
+    cleanupMp(this);
+    if (this.ws && !this._keepWs) {
       this.ws.close();
       this.ws = null;
-    }
-    for (const id of Object.keys(this.remotePlayers)) {
-      this.removeRemotePlayer(id);
     }
   }
 }

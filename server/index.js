@@ -334,11 +334,4 @@ function cleanupBattle(b) {
   battles.delete(b.id);
 }
 
-function broadcast(msg, exclude) {
-  const data = JSON.stringify(msg);
-  wss.clients.forEach(c => { if (c !== exclude && c.readyState === 1) c.send(data); });
-}
-
-// Legacy broadcast kept for non-room messages; room-aware version is broadcastToRoom
-
 console.log(`MMO server listening on port ${PORT}`);
