@@ -390,16 +390,19 @@ export default class MmoMapScene extends Phaser.Scene {
     if (this._chatEl) { this._destroyChat(); return; }
     const el = document.createElement('div');
     Object.assign(el.style, {
-      position: 'fixed', bottom: '10px', right: '10px', width: '320px', height: '420px',
+      position: 'fixed', left: `${window.innerWidth - 330}px`, top: `${window.innerHeight - 430}px`,
+      width: '320px', height: '420px', minWidth: '220px', minHeight: '200px',
       background: '#0a0e1a', border: '2px solid #3355aa', borderRadius: '8px',
       display: 'flex', flexDirection: 'column', zIndex: '999',
       fontFamily: '"Press Start 2P", monospace', overflow: 'hidden'
     });
 
+    /* ── draggable header ── */
     const header = document.createElement('div');
     Object.assign(header.style, {
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '8px 12px', background: '#111828', borderBottom: '1px solid #334'
+      padding: '8px 12px', background: '#111828', borderBottom: '1px solid #334',
+      cursor: 'grab', userSelect: 'none'
     });
     const title = document.createElement('span');
     title.style.color = '#44ffaa'; title.style.fontSize = '11px';
@@ -415,6 +418,25 @@ export default class MmoMapScene extends Phaser.Scene {
     header.appendChild(closeBtn);
     el.appendChild(header);
 
+    let dragging = false, dragOX = 0, dragOY = 0;
+    header.addEventListener('mousedown', (e) => {
+      if (e.target === closeBtn) return;
+      dragging = true;
+      dragOX = e.clientX - el.offsetLeft;
+      dragOY = e.clientY - el.offsetTop;
+      header.style.cursor = 'grabbing';
+    });
+    document.addEventListener('mousemove', this._chatDragMove = (e) => {
+      if (!dragging) return;
+      el.style.left = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOX)) + 'px';
+      el.style.top = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dragOY)) + 'px';
+    });
+    document.addEventListener('mouseup', this._chatDragUp = () => {
+      dragging = false;
+      header.style.cursor = 'grab';
+    });
+
+    /* ── player list ── */
     const playerBox = document.createElement('div');
     playerBox.id = 'mp-player-list';
     Object.assign(playerBox.style, {
@@ -423,6 +445,7 @@ export default class MmoMapScene extends Phaser.Scene {
     });
     el.appendChild(playerBox);
 
+    /* ── messages ── */
     const msgBox = document.createElement('div');
     msgBox.id = 'mp-chat-messages';
     Object.assign(msgBox.style, {
@@ -431,6 +454,7 @@ export default class MmoMapScene extends Phaser.Scene {
     });
     el.appendChild(msgBox);
 
+    /* ── input row ── */
     const inputRow = document.createElement('div');
     Object.assign(inputRow.style, {
       display: 'flex', padding: '6px', borderTop: '1px solid #334', gap: '4px'
@@ -461,6 +485,31 @@ export default class MmoMapScene extends Phaser.Scene {
     inputRow.appendChild(input);
     inputRow.appendChild(sendBtn);
     el.appendChild(inputRow);
+
+    /* ── resize handle (bottom-right corner) ── */
+    const resizeHandle = document.createElement('div');
+    Object.assign(resizeHandle.style, {
+      position: 'absolute', bottom: '0', right: '0', width: '16px', height: '16px',
+      cursor: 'nwse-resize', background: 'linear-gradient(135deg, transparent 50%, #3355aa 50%)',
+      borderRadius: '0 0 6px 0'
+    });
+    el.appendChild(resizeHandle);
+
+    let resizing = false, resOX = 0, resOY = 0, resW = 0, resH = 0;
+    resizeHandle.addEventListener('mousedown', (e) => {
+      resizing = true;
+      resOX = e.clientX; resOY = e.clientY;
+      resW = el.offsetWidth; resH = el.offsetHeight;
+      e.preventDefault(); e.stopPropagation();
+    });
+    document.addEventListener('mousemove', this._chatResizeMove = (e) => {
+      if (!resizing) return;
+      const w = Math.max(220, resW + (e.clientX - resOX));
+      const h = Math.max(200, resH + (e.clientY - resOY));
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+    });
+    document.addEventListener('mouseup', this._chatResizeUp = () => { resizing = false; });
 
     document.body.appendChild(el);
     this._chatEl = el;
@@ -493,6 +542,10 @@ export default class MmoMapScene extends Phaser.Scene {
   }
 
   _destroyChat() {
+    if (this._chatDragMove) { document.removeEventListener('mousemove', this._chatDragMove); this._chatDragMove = null; }
+    if (this._chatDragUp) { document.removeEventListener('mouseup', this._chatDragUp); this._chatDragUp = null; }
+    if (this._chatResizeMove) { document.removeEventListener('mousemove', this._chatResizeMove); this._chatResizeMove = null; }
+    if (this._chatResizeUp) { document.removeEventListener('mouseup', this._chatResizeUp); this._chatResizeUp = null; }
     if (this._chatEl) { this._chatEl.remove(); this._chatEl = null; }
   }
 
