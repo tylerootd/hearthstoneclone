@@ -25,7 +25,7 @@ export default class BattleScene extends Phaser.Scene {
     this.battleData = data || {};
     this.selecting = null;
     this.targetMode = false;
-    this.animLock = false;
+    this._enemyTurn = false;
     this._dragCard = null;
     this._selOrigin = null;
 
@@ -160,7 +160,7 @@ export default class BattleScene extends Phaser.Scene {
 
       fr.setInteractive({ useHandCursor: true });
       const canAct = isPlayer && m.canAttack && !this.targetMode &&
-        this.bs.phase === 'playing' && this.bs.currentTurn === 'player' && !this.animLock;
+        this.bs.phase === 'playing' && this.bs.currentTurn === 'player';
 
       if (canAct) {
         fr.on('pointerdown', () => {
@@ -251,7 +251,7 @@ export default class BattleScene extends Phaser.Scene {
       );
 
       ct.on('pointerover', () => {
-        if (this.animLock || this.targetMode || this._dragCard) return;
+        if (this.targetMode || this._dragCard) return;
         ct.setDepth(100);
         this.tweens.killTweensOf(ct);
         this.tweens.add({
@@ -266,9 +266,8 @@ export default class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: ct, y: cy, scaleX: 1, scaleY: 1, angle: ang, duration: 80 });
       });
 
-      const canDrag = ok && !this.targetMode && this.bs.phase === 'playing' &&
-        this.bs.currentTurn === 'player' && !this.animLock;
-      if (canDrag) {
+      if (ok && !this.targetMode && this.bs.phase === 'playing' &&
+        this.bs.currentTurn === 'player') {
         ct.on('pointerdown', () => {
           this._dragCard = { ct, idx: i, ox: cx, oy: cy, oa: ang, card };
           ct.setDepth(200);
@@ -309,7 +308,7 @@ export default class BattleScene extends Phaser.Scene {
 
   /* ═══════ END TURN BUTTON ═══════ */
   _endBtn() {
-    if (this.bs.phase !== 'playing' || this.bs.currentTurn !== 'player' || this.animLock) return;
+    if (this.bs.phase !== 'playing' || this.bs.currentTurn !== 'player' || this._enemyTurn) return;
     const bx = 958, by = 330;
     const bg = this._ui(this.add.rectangle(bx, by, 78, 34, 0x775511, 0.9)
       .setStrokeStyle(2, 0xccaa44).setDepth(20));
@@ -411,56 +410,23 @@ export default class BattleScene extends Phaser.Scene {
       this.targetMode = true;
       this.refresh();
     } else {
-      this._playAnim(idx, ct);
+      playCard(this.bs, 'player', idx, null);
+      this.refresh();
     }
   }
 
-  /* ═══════ PLAY CARD ANIMATION ═══════ */
-  _playAnim(idx, ct) {
-    if (this.animLock) return;
-    this.animLock = true;
-    const isMinion = this.bs.player.hand[idx]?.type === 'minion';
-    this.tweens.add({
-      targets: ct,
-      x: W / 2, y: isMinion ? BOARD_Y.player : 330,
-      scaleX: 0.5, scaleY: 0.5, alpha: 0.3, angle: 0,
-      duration: 200, ease: 'Power2',
-      onComplete: () => {
-        const hi = this.handCards.indexOf(ct);
-        if (hi >= 0) this.handCards.splice(hi, 1);
-        ct.destroy();
-        playCard(this.bs, 'player', idx, null);
-        this.animLock = false;
-        this.refresh();
-      }
-    });
-  }
-
-  /* ═══════ ATTACK ANIMATION ═══════ */
-  _atkAnim(uid, target, ax, ay, tx, ty) {
-    if (this.animLock) return;
-    this.animLock = true;
+  /* ═══════ ATTACK ═══════ */
+  _doAttack(uid, target, tx, ty) {
     this.arrowGfx.clear();
     const attacker = this.bs.player.board.find(m => m.uid === uid);
     const dmg = attacker ? attacker.atk : 0;
-
-    const dot = this.add.circle(ax, ay, 5, 0x44ff44).setDepth(100);
-    this.tweens.add({
-      targets: dot, x: tx, y: ty, duration: 120, ease: 'Power2', yoyo: true,
-      onYoyo: () => {
-        this.cameras.main.shake(60, 0.005);
-        this._float(tx, ty, `-${dmg}`, '#ff4444');
-      },
-      onComplete: () => {
-        dot.destroy();
-        minionAttack(this.bs, 'player', uid, target);
-        this.animLock = false;
-        this.targetMode = false;
-        this.selecting = null;
-        this._selOrigin = null;
-        this.refresh();
-      }
-    });
+    minionAttack(this.bs, 'player', uid, target);
+    this.targetMode = false;
+    this.selecting = null;
+    this._selOrigin = null;
+    this.refresh();
+    this.cameras.main.shake(60, 0.005);
+    this._float(tx, ty, `-${dmg}`, '#ff4444');
   }
 
   _float(x, y, text, color) {
@@ -500,38 +466,35 @@ export default class BattleScene extends Phaser.Scene {
       this.arrowGfx.clear();
       this.refresh();
     } else if (this.selecting.type === 'attack') {
-      const uid = this.selecting.uid;
-      const ai = this.bs.player.board.findIndex(m => m.uid === uid);
-      const gap = MIN_S + 12;
-      const sx = W / 2 - (this.bs.player.board.length - 1) * gap / 2;
-      const ax = sx + ai * gap, ay = BOARD_Y.player;
       let tx, ty;
       if (info.type === 'hero') { tx = W / 2; ty = HERO_Y.enemy; }
       else {
         const ti = this.bs.enemy.board.findIndex(m => m.uid === info.uid);
+        const gap = MIN_S + 12;
         const esx = W / 2 - (this.bs.enemy.board.length - 1) * gap / 2;
         tx = esx + ti * gap; ty = BOARD_Y.enemy;
       }
-      this._atkAnim(uid, info, ax, ay, tx, ty);
+      this._doAttack(this.selecting.uid, info, tx, ty);
     }
   }
 
   /* ═══════ END TURN ═══════ */
   endTurn() {
-    if (this.animLock) return;
-    this.animLock = true;
+    if (this._enemyTurn) return;
+    this._enemyTurn = true;
     endTurnTriggers(this.bs, 'player');
-    if (this.bs.phase === 'over') { this.animLock = false; this.refresh(); return; }
+    if (this.bs.phase === 'over') { this._enemyTurn = false; this.refresh(); return; }
     startTurn(this.bs, 'enemy');
-    if (this.bs.phase === 'over') { this.animLock = false; this.refresh(); return; }
+    if (this.bs.phase === 'over') { this._enemyTurn = false; this.refresh(); return; }
+    this.refresh();
     this._banner('ENEMY TURN');
     this.time.delayedCall(700, () => {
       runEnemyTurn(this.bs);
-      if (this.bs.phase === 'over') { this.animLock = false; this.refresh(); return; }
+      if (this.bs.phase === 'over') { this._enemyTurn = false; this.refresh(); return; }
       endTurnTriggers(this.bs, 'enemy');
-      if (this.bs.phase === 'over') { this.animLock = false; this.refresh(); return; }
+      if (this.bs.phase === 'over') { this._enemyTurn = false; this.refresh(); return; }
       startTurn(this.bs, 'player');
-      this.animLock = false;
+      this._enemyTurn = false;
       this.refresh();
       this._banner('YOUR TURN');
     });
