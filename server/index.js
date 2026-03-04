@@ -9,8 +9,23 @@ function shuffle(a) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const
 function makeMinion(card) {
   return { uid: crypto.randomUUID(), id: card.id, name: card.name, cost: card.cost,
     atk: card.atk, hp: card.hp, maxHp: card.hp, effect: card.effect || null,
-    triggers: card.triggers || [], canAttack: false,
+    triggers: card.triggers || [], keywords: card.keywords ? [...card.keywords] : [],
+    canAttack: false, slot: -1,
     sprite: card.sprite || null, spriteData: card.spriteData || null };
+}
+
+function nextFreeSlot(board) {
+  const taken = new Set(board.map(m => m.slot));
+  for (let d = 0; d < MAX_BOARD; d++) {
+    const s = 3 + Math.ceil(d / 2) * (d % 2 === 0 ? 1 : -1);
+    if (s >= 0 && s < MAX_BOARD && !taken.has(s)) return s;
+  }
+  for (let s = 0; s < MAX_BOARD; s++) { if (!taken.has(s)) return s; }
+  return 0;
+}
+
+function guardianBlockingHero(attackerSlot, oppBoard) {
+  return oppBoard.find(m => m.keywords && m.keywords.includes('guardian') && m.slot === attackerSlot) || null;
 }
 
 function drawCard(state, who) {
@@ -50,7 +65,7 @@ function processTriggers(state, who, timing) {
   }
 }
 
-function playCard(state, who, handIndex, targetInfo) {
+function playCard(state, who, handIndex, targetInfo, boardPos) {
   const side = state[who]; const opp = who === 'player' ? state.enemy : state.player;
   const card = side.hand[handIndex];
   if (!card || card.cost > side.mana) return false;
@@ -60,6 +75,12 @@ function playCard(state, who, handIndex, targetInfo) {
   if (card.type === 'minion') {
     const minion = makeMinion(card);
     if (side.artifacts && side.artifacts.includes('warcry_aura')) { minion.atk += 1; state.log.push(`Warcry Aura: +1 Atk`); }
+    const taken = new Set(side.board.map(m => m.slot));
+    if (boardPos != null && boardPos >= 0 && boardPos < MAX_BOARD && !taken.has(boardPos)) {
+      minion.slot = boardPos;
+    } else {
+      minion.slot = nextFreeSlot(side.board);
+    }
     side.board.push(minion);
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
   } else if (card.type === 'spell' && card.effect) { applyEffect(state, who, card.effect, targetInfo, null); }
@@ -98,7 +119,11 @@ function minionAttack(state, who, attackerUid, targetInfo) {
   const side = state[who]; const opp = who === 'player' ? state.enemy : state.player;
   const atk = side.board.find(m => m.uid === attackerUid);
   if (!atk || !atk.canAttack) return false;
-  if (targetInfo.type === 'hero') { opp.hp -= atk.atk; state.log.push(`${atk.name} hits hero for ${atk.atk}`); }
+  if (targetInfo.type === 'hero') {
+    const blocker = guardianBlockingHero(atk.slot, opp.board);
+    if (blocker) { state.log.push(`${blocker.name} (Guardian) blocks ${atk.name}!`); return false; }
+    opp.hp -= atk.atk; state.log.push(`${atk.name} hits hero for ${atk.atk}`);
+  }
   else { const def = opp.board.find(m => m.uid === targetInfo.uid); if (!def) return false; def.hp -= atk.atk; atk.hp -= def.atk; state.log.push(`${atk.name} vs ${def.name}`); cleanDead(state); }
   atk.canAttack = false; checkWin(state); return true;
 }
@@ -283,7 +308,7 @@ wss.on('connection', (ws) => {
         if (b.state.currentTurn !== side) return; // not your turn
 
         if (msg.type === 'pvp_play_card') {
-          playCard(b.state, side, msg.handIndex, msg.target || null);
+          playCard(b.state, side, msg.handIndex, msg.target || null, msg.boardPos != null ? msg.boardPos : undefined);
         }
         else if (msg.type === 'pvp_attack') {
           minionAttack(b.state, side, msg.attackerUid, msg.target);

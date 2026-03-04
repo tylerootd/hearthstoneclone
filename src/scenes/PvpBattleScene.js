@@ -3,16 +3,19 @@ import { getCardTextureKey } from '../utils/cardSprite.js';
 import { grantXp } from '../data/progression.js';
 import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from '../data/storage.js';
 import { rebuildPool } from '../data/cardPool.js';
-import { ARTIFACT_DEFS } from '../game/battleEngine.js';
+import { ARTIFACT_DEFS, guardianBlockingHero } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
-const MIN_S = 68;
+const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
-const BOARD_Y = { enemy: 190, player: 445 };
-const HERO_Y = { enemy: 55, player: 565 };
-const HAND_Y = 688;
-const PLAY_LINE = 588;
+const BOARD_Y = { enemy: 155, player: 395 };
+const HERO_Y = { enemy: 42, player: 524 };
+const HAND_Y = 662;
+const PLAY_LINE = 550;
+const HIT_PAD = 18;
+const SLOT_COUNT = 7;
+const SLOT_X = (s) => W / 2 + (s - 3) * BOARD_GAP;
 
 export default class PvpBattleScene extends Phaser.Scene {
   constructor() { super('PvpBattle'); }
@@ -27,16 +30,23 @@ export default class PvpBattleScene extends Phaser.Scene {
     this.targetMode = false;
     this._dragCard = null;
     this._selOrigin = null;
+    this._handSlots = [];
+    this._hoveredIdx = -1;
+    this._positionMode = false;
+    this._pendingPlay = null;
+    this._logOpen = false;
+    this._logGroup = null;
     this.resultShown = false;
 
     this.add.image(W / 2, H / 2, 'battle_board').setDisplaySize(W, H).setDepth(0);
     this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.32).setDepth(1);
-    this.add.rectangle(W / 2, 330, 680, 2, 0x44403a, 0.4).setDepth(5);
+    this.add.rectangle(W / 2, 278, 700, 2, 0x44403a, 0.4).setDepth(5);
 
     this.uiGroup = this.add.group();
     this.handCards = [];
     this.arrowGfx = this.add.graphics().setDepth(50);
 
+    this.input.on('pointerdown', (p) => this._onDown(p));
     this.input.on('pointermove', (p) => this._onMove(p));
     this.input.on('pointerup', (p) => this._onUp(p));
     this.input.keyboard.on('keydown-ESC', () => this._cancel());
@@ -49,6 +59,8 @@ export default class PvpBattleScene extends Phaser.Scene {
           this.state = msg;
           this.selecting = null;
           this.targetMode = false;
+          this._positionMode = false;
+          this._pendingPlay = null;
           this._dragCard = null;
           this.arrowGfx.clear();
           this.redraw();
@@ -74,6 +86,9 @@ export default class PvpBattleScene extends Phaser.Scene {
       d.ct.setDepth(30 + d.idx);
       this._dragCard = null;
     }
+    if (this._hoveredIdx >= 0) { this._unhoverSlot(this._hoveredIdx); this._hoveredIdx = -1; }
+    this._positionMode = false;
+    this._pendingPlay = null;
     this.targetMode = false;
     this.selecting = null;
     this._selOrigin = null;
@@ -87,6 +102,8 @@ export default class PvpBattleScene extends Phaser.Scene {
     const s = this.state;
     if (!s) return;
 
+    this._drawBoardFrames(BOARD_Y.enemy);
+    this._drawBoardFrames(BOARD_Y.player);
     this._heroPanel(W / 2, HERO_Y.enemy, s.opponent, 'OPPONENT', true);
     this._boardRow(s.opponent.board, BOARD_Y.enemy, false);
     this._boardRow(s.you.board, BOARD_Y.player, true);
@@ -97,13 +114,34 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._log(s);
     this._enemyHandBacks(s.opponent.handCount);
 
-    const turnMsg = s.yourTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
-    const turnCol = s.yourTurn ? '#44ff44' : '#ff8844';
-    this._ui(this.add.text(W / 2, 328, this.targetMode ? 'SELECT A TARGET' : turnMsg, {
-      ...FONT, fontSize: '10px', color: this.targetMode ? '#ffcc00' : turnCol
-    }).setOrigin(0.5).setDepth(20));
+    if (this._positionMode) {
+      this._showPositionSlots();
+      this._ui(this.add.text(W / 2, 278, 'CHOOSE A POSITION', {
+        ...FONT, fontSize: '10px', color: '#cc88ff'
+      }).setOrigin(0.5).setDepth(20));
+    } else {
+      const turnMsg = s.yourTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
+      const turnCol = s.yourTurn ? '#44ff44' : '#ff8844';
+      this._ui(this.add.text(W / 2, 278, this.targetMode ? 'SELECT A TARGET' : turnMsg, {
+        ...FONT, fontSize: '10px', color: this.targetMode ? '#ffcc00' : turnCol
+      }).setOrigin(0.5).setDepth(20));
+    }
 
     if (s.phase === 'over') this.showResult();
+  }
+
+  _drawBoardFrames(y) {
+    for (let s = 0; s < SLOT_COUNT; s++) {
+      const fx = SLOT_X(s);
+      this._ui(this.add.rectangle(fx, y, CARD_W, CARD_H, 0x000000, 0.12)
+        .setStrokeStyle(1, 0x444455).setDepth(8));
+      if (this.textures.exists('card_frame'))
+        this._ui(this.add.image(fx, y - 2, 'card_frame').setDisplaySize(CARD_W, CARD_H).setAlpha(0.15).setDepth(8));
+    }
+  }
+
+  _occupiedSlots() {
+    return new Set((this.state?.you?.board || []).map(m => m.slot));
   }
 
   /* ═══════ HERO ═══════ */
@@ -137,62 +175,87 @@ export default class PvpBattleScene extends Phaser.Scene {
     }
 
     if (isEnemy && this.targetMode) {
-      bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => this._onTarget({ type: 'hero' }));
-      bg.on('pointerover', () => bg.setStrokeStyle(3, 0xff4444));
-      bg.on('pointerout', () => bg.setStrokeStyle(2, stroke));
+      const oppBoard = this.state?.opponent?.board || [];
+      const blocked = this.selecting?.type === 'attack' &&
+        guardianBlockingHero(this.selecting.slot, oppBoard);
+      if (!blocked) {
+        bg.setInteractive({ useHandCursor: true });
+        bg.on('pointerdown', () => this._onTarget({ type: 'hero' }));
+        bg.on('pointerover', () => bg.setStrokeStyle(3, 0xff4444));
+        bg.on('pointerout', () => bg.setStrokeStyle(2, stroke));
+      } else {
+        const bx = W / 2, by = y;
+        this._ui(this.add.rectangle(bx, by, 300, 36, 0x000000, 0.85).setStrokeStyle(2, 0xff4444).setDepth(100));
+        this._ui(this.add.text(bx, by, '\u{1F6E1}  BLOCKED BY GUARDIAN', {
+          ...FONT, fontSize: '11px', color: '#ff6644', stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(101));
+      }
     }
   }
 
-  /* ═══════ BOARD ═══════ */
+  /* ═══════ BOARD (full card size, fixed slots) ═══════ */
   _boardRow(board, yBase, isPlayer) {
-    const gap = MIN_S + 12;
-    const sx = W / 2 - (board.length - 1) * gap / 2;
-    board.forEach((m, i) => {
-      const x = sx + i * gap, y = yBase;
+    board.forEach((m) => {
+      const x = SLOT_X(m.slot != null && m.slot >= 0 ? m.slot : 0), y = yBase;
       const texKey = m.sprite ? (() => {
         const k = 'sprite_' + m.sprite.replace('.png', '');
         return this.textures.exists(k) ? k : null;
       })() : null;
-      const bc = isPlayer ? 0x337744 : 0x774433;
+      const isGuardian = m.keywords && m.keywords.includes('guardian');
+      const bc = isGuardian ? 0x33ddff : (isPlayer ? 0x337744 : 0x774433);
 
-      const fr = this._ui(this.add.rectangle(x, y, MIN_S, MIN_S, 0x0d0d1a, 0.9).setStrokeStyle(2, bc).setDepth(10));
-      if (texKey) this._ui(this.add.image(x, y - 2, texKey).setDisplaySize(MIN_S - 12, MIN_S - 16).setDepth(11));
+      if (isGuardian) {
+        this._ui(this.add.rectangle(x, y, CARD_W + 10, CARD_H + 10, 0x000000, 0)
+          .setStrokeStyle(4, 0x33ddff).setDepth(9));
+        this._ui(this.add.rectangle(x, y, CARD_W + 6, CARD_H + 6, 0x11aacc, 0.12)
+          .setDepth(9));
+      }
 
-      this._ui(this.add.text(x, y - MIN_S / 2 + 5, m.name.slice(0, 7), {
+      const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0x0d0d1a, 0.9).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
+      if (texKey) this._ui(this.add.image(x, y - 16, texKey).setDisplaySize(CARD_W - 22, 50).setDepth(11));
+      if (this.textures.exists('card_frame'))
+        this._ui(this.add.image(x, y - 2, 'card_frame').setDisplaySize(CARD_W, CARD_H).setDepth(11));
+
+      this._ui(this.add.text(x, y - CARD_H / 2 + 8, m.name.slice(0, 9), {
         ...FONT, fontSize: '5px', color: '#ddd', backgroundColor: '#00000099', padding: { x: 2, y: 1 }
       }).setOrigin(0.5).setDepth(12));
 
-      const r = 11;
-      this._ui(this.add.circle(x - MIN_S / 2 + 9, y + MIN_S / 2 - 9, r, 0xaa8800).setDepth(12));
-      this._ui(this.add.text(x - MIN_S / 2 + 9, y + MIN_S / 2 - 9, `${m.atk}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
-      this._ui(this.add.circle(x + MIN_S / 2 - 9, y + MIN_S / 2 - 9, r, 0xbb2222).setDepth(12));
-      this._ui(this.add.text(x + MIN_S / 2 - 9, y + MIN_S / 2 - 9, `${m.hp}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
+      if (isGuardian) {
+        this._ui(this.add.text(x, y - 6, '\u{1F6E1}', { fontSize: '22px' }).setOrigin(0.5).setDepth(14));
+        this._ui(this.add.text(x, y + 12, 'GUARDIAN', {
+          ...FONT, fontSize: '5px', color: '#33ddff', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(14));
+      }
+
+      this._ui(this.add.circle(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, 10, 0xaa8800).setDepth(12));
+      this._ui(this.add.text(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, `${m.atk}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
+      this._ui(this.add.circle(x + CARD_W / 2 - 11, y + CARD_H / 2 - 13, 10, 0xbb2222).setDepth(12));
+      this._ui(this.add.text(x + CARD_W / 2 - 11, y + CARD_H / 2 - 13, `${m.hp}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
 
       if (!m.canAttack && isPlayer)
-        this._ui(this.add.text(x, y + 2, 'zzz', { ...FONT, fontSize: '7px', color: '#555' }).setOrigin(0.5).setDepth(13));
+        this._ui(this.add.text(x, y + 4, 'zzz', { ...FONT, fontSize: '7px', color: '#555' }).setOrigin(0.5).setDepth(13));
 
       fr.setInteractive({ useHandCursor: true });
       const s = this.state;
       if (isPlayer && m.canAttack && !this.targetMode && s.phase === 'playing' && s.yourTurn) {
         fr.on('pointerdown', () => {
-          this.selecting = { type: 'attack', uid: m.uid };
+          this.selecting = { type: 'attack', uid: m.uid, slot: m.slot };
           this._selOrigin = { x, y };
           this.targetMode = true;
           this.redraw();
         });
         fr.on('pointerover', () => fr.setStrokeStyle(3, 0x44ff44));
-        fr.on('pointerout', () => fr.setStrokeStyle(2, bc));
+        fr.on('pointerout', () => fr.setStrokeStyle(isGuardian ? 3 : 2, bc));
       }
       if (this.targetMode && !isPlayer) {
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
         fr.on('pointerover', () => fr.setStrokeStyle(3, 0xff4444));
-        fr.on('pointerout', () => fr.setStrokeStyle(2, bc));
+        fr.on('pointerout', () => fr.setStrokeStyle(isGuardian ? 3 : 2, bc));
       }
       if (this.targetMode && isPlayer && this.selecting?.needsFriendly) {
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
         fr.on('pointerover', () => fr.setStrokeStyle(3, 0x4499ff));
-        fr.on('pointerout', () => fr.setStrokeStyle(2, bc));
+        fr.on('pointerout', () => fr.setStrokeStyle(isGuardian ? 3 : 2, bc));
       }
     });
   }
@@ -202,6 +265,8 @@ export default class PvpBattleScene extends Phaser.Scene {
     const hand = this.state.you.hand;
     const s = this.state;
     const n = hand.length;
+    this._handSlots = [];
+    this._hoveredIdx = -1;
     if (!n) return;
     const sp = Math.min(CARD_W + 6, 540 / n);
     const tw = (n - 1) * sp;
@@ -257,37 +322,68 @@ export default class PvpBattleScene extends Phaser.Scene {
           ...FONT, fontSize: '4px', color: '#88ccaa'
         }).setOrigin(0.5));
 
-      ct.setSize(CARD_W, CARD_H);
-      ct.setInteractive(
-        new Phaser.Geom.Rectangle(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H),
-        Phaser.Geom.Rectangle.Contains
-      );
+      if (card.keywords && card.keywords.includes('guardian'))
+        ct.add(this.add.text(0, 46, '\u{1F6E1} GUARDIAN', {
+          ...FONT, fontSize: '4px', color: '#eebb44'
+        }).setOrigin(0.5));
 
-      ct.on('pointerover', () => {
-        if (this.targetMode || this._dragCard) return;
-        ct.setDepth(100);
-        this.tweens.killTweensOf(ct);
-        this.tweens.add({
-          targets: ct, y: cy - 30, scaleX: 1.2, scaleY: 1.2, angle: 0,
-          duration: 100, ease: 'Back.easeOut'
-        });
-      });
-      ct.on('pointerout', () => {
-        if (this._dragCard?.ct === ct) return;
-        ct.setDepth(30 + i);
-        this.tweens.killTweensOf(ct);
-        this.tweens.add({ targets: ct, y: cy, scaleX: 1, scaleY: 1, angle: ang, duration: 80 });
-      });
-
-      if (ok && !this.targetMode) {
-        ct.on('pointerdown', () => {
-          this._dragCard = { ct, idx: i, ox: cx, oy: cy, oa: ang, card };
-          ct.setDepth(200);
-        });
-      }
-
+      this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i });
       this.handCards.push(ct);
     });
+  }
+
+  /* ═══════ HAND HIT DETECTION (X-band, covers full card area) ═══════ */
+  _handIdxAt(x, y) {
+    const slots = this._handSlots;
+    if (!slots.length) return -1;
+    const hoveredLift = 32, hoveredScale = 1.22;
+    const handTop = HAND_Y - (CARD_H / 2) * hoveredScale - hoveredLift - HIT_PAD;
+    if (y < handTop) return -1;
+    const n = slots.length;
+    for (let i = 0; i < n; i++) {
+      const hw = (CARD_W * hoveredScale) / 2 + HIT_PAD;
+      const left = i === 0 ? slots[0].cx - hw : (slots[i - 1].cx + slots[i].cx) / 2;
+      const right = i === n - 1 ? slots[n - 1].cx + hw : (slots[i].cx + slots[i + 1].cx) / 2;
+      if (x >= left && x <= right) return i;
+    }
+    return -1;
+  }
+
+  /* ═══════ HAND HOVER (slot-based, no overlap issues) ═══════ */
+  _updateHandHover(ptr) {
+    if (this.targetMode || this._dragCard) {
+      if (this._hoveredIdx >= 0) { this._unhoverSlot(this._hoveredIdx); this._hoveredIdx = -1; }
+      return;
+    }
+    const hitIdx = this._handIdxAt(ptr.x, ptr.y);
+    if (hitIdx === this._hoveredIdx) return;
+    if (this._hoveredIdx >= 0) this._unhoverSlot(this._hoveredIdx);
+    if (hitIdx >= 0) this._hoverSlot(hitIdx);
+    this._hoveredIdx = hitIdx;
+  }
+
+  _hoverSlot(idx) {
+    const s = this._handSlots[idx];
+    if (!s?.ct?.active) return;
+    s.ct.setDepth(100);
+    s.ct.y = s.cy - 32;
+    s.ct.scaleX = 1.22;
+    s.ct.scaleY = 1.22;
+    s.ct.angle = 0;
+    const bg = s.ct.list[0];
+    if (bg?.setStrokeStyle) bg.setStrokeStyle(3, 0xaa44ff);
+  }
+
+  _unhoverSlot(idx) {
+    const s = this._handSlots[idx];
+    if (!s?.ct?.active) return;
+    s.ct.setDepth(30 + idx);
+    s.ct.y = s.cy;
+    s.ct.scaleX = 1;
+    s.ct.scaleY = 1;
+    s.ct.angle = s.ang;
+    const bg = s.ct.list[0];
+    if (bg?.setStrokeStyle) bg.setStrokeStyle(s.ok ? 2 : 1, s.ok ? 0x44aaff : 0x2a2a3a);
   }
 
   _enemyHandBacks(count) {
@@ -316,7 +412,7 @@ export default class PvpBattleScene extends Phaser.Scene {
 
   _endBtn(s) {
     if (s.phase !== 'playing' || !s.yourTurn || this.targetMode) return;
-    const bx = 958, by = 330;
+    const bx = 958, by = 278;
     const bg = this._ui(this.add.rectangle(bx, by, 78, 34, 0x775511, 0.9)
       .setStrokeStyle(2, 0xccaa44).setDepth(20));
     bg.setInteractive({ useHandCursor: true });
@@ -329,11 +425,121 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   _log(s) {
-    (s.log || []).forEach((l, i) => {
-      this._ui(this.add.text(10, 335 + i * 13, l, {
-        ...FONT, fontSize: '5px', color: '#555'
-      }).setDepth(15));
+    this._pvpLog = s.log || [];
+    const btn = this._ui(this.add.rectangle(52, 278, 80, 28, 0x1a1a2e, 0.9)
+      .setStrokeStyle(2, 0x5566aa).setDepth(15));
+    this._ui(this.add.text(52, 278, 'LOG', {
+      ...FONT, fontSize: '10px', color: '#88aaff'
+    }).setOrigin(0.5).setDepth(16));
+    btn.setInteractive({ useHandCursor: true });
+    btn.on('pointerdown', () => this._toggleLog());
+    btn.on('pointerover', () => btn.setStrokeStyle(2, 0x88ccff));
+    btn.on('pointerout', () => btn.setStrokeStyle(2, 0x5566aa));
+  }
+
+  _toggleLog() {
+    if (this._logOpen) { this._closeLog(); return; }
+    this._logOpen = true;
+    this._logGroup = this.add.group();
+
+    const pw = 560, ph = 440;
+    const cx = W / 2, cy = H / 2;
+
+    const overlay = this.add.rectangle(cx, cy, W, H, 0x000000, 0.6)
+      .setDepth(500).setInteractive();
+    this._logGroup.add(overlay);
+
+    const panel = this.add.rectangle(cx, cy, pw, ph, 0x0c0c1e, 0.96)
+      .setStrokeStyle(3, 0x5566aa).setDepth(501);
+    this._logGroup.add(panel);
+
+    this._logGroup.add(this.add.text(cx, cy - ph / 2 + 22, 'BATTLE LOG', {
+      ...FONT, fontSize: '14px', color: '#88aaff'
+    }).setOrigin(0.5).setDepth(502));
+
+    this._logGroup.add(this.add.rectangle(cx, cy - ph / 2 + 40, pw - 40, 2, 0x334466)
+      .setDepth(502));
+
+    const entries = this._pvpLog || [];
+    const startY = cy - ph / 2 + 56;
+    const maxVisible = Math.floor((ph - 90) / 18);
+    const visible = entries.slice(-maxVisible);
+    visible.forEach((line, i) => {
+      const color = line.includes('dies') ? '#ff5555' :
+        line.includes('attacks') || line.includes('hits') ? '#ffaa44' :
+        line.includes('plays') ? '#66dd66' :
+        line.includes('Guardian') ? '#33ddff' :
+        line.includes('Heals') || line.includes('heal') ? '#55ff99' : '#ccccdd';
+      this._logGroup.add(this.add.text(cx - pw / 2 + 28, startY + i * 18, line, {
+        ...FONT, fontSize: '8px', color, wordWrap: { width: pw - 56 }
+      }).setDepth(502));
     });
+
+    const closeBtn = this.add.rectangle(cx + pw / 2 - 24, cy - ph / 2 + 22, 30, 22, 0x882233, 0.9)
+      .setStrokeStyle(2, 0xff4444).setDepth(503).setInteractive({ useHandCursor: true });
+    this._logGroup.add(closeBtn);
+    this._logGroup.add(this.add.text(cx + pw / 2 - 24, cy - ph / 2 + 22, 'X', {
+      ...FONT, fontSize: '10px', color: '#ff6666'
+    }).setOrigin(0.5).setDepth(504));
+    closeBtn.on('pointerdown', () => this._closeLog());
+    overlay.on('pointerdown', () => this._closeLog());
+  }
+
+  _closeLog() {
+    if (this._logGroup) { this._logGroup.clear(true, true); this._logGroup = null; }
+    this._logOpen = false;
+  }
+
+  /* ═══════ INPUT: POINTER DOWN (scene-level for hand cards) ═══════ */
+  _onDown(ptr) {
+    if (this._dragCard || this.targetMode || this._positionMode) return;
+    if (!this.state || !this.state.yourTurn || this.state.phase !== 'playing') return;
+    const idx = this._handIdxAt(ptr.x, ptr.y);
+    if (idx < 0) return;
+    const s = this._handSlots[idx];
+    if (!s || !s.ok) return;
+    if (this._hoveredIdx >= 0) this._unhoverSlot(this._hoveredIdx);
+    this._hoveredIdx = -1;
+    this._dragCard = { ct: s.ct, idx: s.idx, ox: s.cx, oy: s.cy, oa: s.ang, card: s.card, _snapSlot: -1 };
+    s.ct.setDepth(200);
+  }
+
+  /* ═══════ ARROW DRAWING ═══════ */
+  _drawArrow(x1, y1, x2, y2, color, alpha = 0.85) {
+    const gfx = this.arrowGfx;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 8) return;
+    const a = Math.atan2(dy, dx);
+    const headLen = Math.min(20, len * 0.25);
+
+    gfx.lineStyle(10, color, alpha * 0.15);
+    gfx.beginPath(); gfx.moveTo(x1, y1); gfx.lineTo(x2, y2); gfx.strokePath();
+
+    const dots = Math.max(3, Math.floor(len / 16));
+    for (let i = 1; i <= dots; i++) {
+      const t = i / (dots + 1);
+      const px = x1 + dx * t, py = y1 + dy * t;
+      const r = 2.2 + Math.sin(t * Math.PI) * 1.6;
+      gfx.fillStyle(color, alpha * (0.3 + t * 0.7));
+      gfx.fillCircle(px, py, r);
+    }
+
+    gfx.lineStyle(2.5, color, alpha);
+    gfx.beginPath(); gfx.moveTo(x1, y1); gfx.lineTo(x2, y2); gfx.strokePath();
+
+    gfx.fillStyle(color, alpha * 0.35);
+    gfx.fillTriangle(
+      x2 + 4 * Math.cos(a), y2 + 4 * Math.sin(a),
+      x2 - (headLen + 4) * Math.cos(a - 0.5), y2 - (headLen + 4) * Math.sin(a - 0.5),
+      x2 - (headLen + 4) * Math.cos(a + 0.5), y2 - (headLen + 4) * Math.sin(a + 0.5)
+    );
+    gfx.fillStyle(color, alpha);
+    gfx.fillTriangle(
+      x2, y2,
+      x2 - headLen * Math.cos(a - 0.4), y2 - headLen * Math.sin(a - 0.4),
+      x2 - headLen * Math.cos(a + 0.4), y2 - headLen * Math.sin(a + 0.4)
+    );
   }
 
   /* ═══════ INPUT ═══════ */
@@ -341,26 +547,38 @@ export default class PvpBattleScene extends Phaser.Scene {
     this.arrowGfx.clear();
     if (this._dragCard) {
       const d = this._dragCard;
-      d.ct.x = ptr.x; d.ct.y = ptr.y; d.ct.setAngle(0);
+      d.ct.setAngle(0);
       const bg = d.ct.list?.[0];
-      if (bg?.setStrokeStyle) bg.setStrokeStyle(2, ptr.y < PLAY_LINE ? 0x44ff44 : 0x44aaff);
+      if (d.card.type === 'minion' && ptr.y < PLAY_LINE) {
+        const taken = this._occupiedSlots();
+        let best = -1, bestD = Infinity;
+        for (let s = 0; s < SLOT_COUNT; s++) {
+          if (taken.has(s)) continue;
+          const dist = Math.abs(ptr.x - SLOT_X(s));
+          if (dist < bestD) { bestD = dist; best = s; }
+        }
+        if (best >= 0) {
+          d.ct.x = SLOT_X(best);
+          d.ct.y = BOARD_Y.player;
+          d.ct.setScale(1);
+          d._snapSlot = best;
+          if (bg?.setStrokeStyle) bg.setStrokeStyle(3, 0x44ff44);
+        }
+      } else {
+        d.ct.x = ptr.x;
+        d.ct.y = ptr.y;
+        d._snapSlot = -1;
+        if (bg?.setStrokeStyle) bg.setStrokeStyle(3, ptr.y < PLAY_LINE ? 0x44ff44 : 0xaa44ff);
+      }
+      const arrowColor = ptr.y < PLAY_LINE ? 0x44ff88 : 0xaa66ff;
+      this._drawArrow(d.ox, d.oy, d.ct.x, d.ct.y, arrowColor);
       return;
     }
     if (this.targetMode && this._selOrigin) {
       const o = this._selOrigin;
-      this.arrowGfx.lineStyle(3, 0xff4444, 0.7);
-      this.arrowGfx.beginPath();
-      this.arrowGfx.moveTo(o.x, o.y);
-      this.arrowGfx.lineTo(ptr.x, ptr.y);
-      this.arrowGfx.strokePath();
-      const a = Math.atan2(ptr.y - o.y, ptr.x - o.x), s = 10;
-      this.arrowGfx.fillStyle(0xff4444, 0.7);
-      this.arrowGfx.fillTriangle(
-        ptr.x, ptr.y,
-        ptr.x - s * Math.cos(a - 0.4), ptr.y - s * Math.sin(a - 0.4),
-        ptr.x - s * Math.cos(a + 0.4), ptr.y - s * Math.sin(a + 0.4)
-      );
+      this._drawArrow(o.x, o.y, ptr.x, ptr.y, 0xff4444);
     }
+    this._updateHandHover(ptr);
   }
 
   _onUp(ptr) {
@@ -368,14 +586,24 @@ export default class PvpBattleScene extends Phaser.Scene {
     const d = this._dragCard;
     this._dragCard = null;
     const dist = Phaser.Math.Distance.Between(ptr.downX, ptr.downY, ptr.x, ptr.y);
+    const resetCard = () => {
+      d.ct.x = d.ox; d.ct.y = d.oy; d.ct.setAngle(d.oa);
+      d.ct.setDepth(30 + d.idx); d.ct.setScale(1);
+    };
 
     if (dist < 8) {
-      d.ct.x = d.ox; d.ct.y = d.oy; d.ct.setAngle(d.oa); d.ct.setDepth(30 + d.idx); d.ct.setScale(1);
-      this._tryPlay(d.idx, d.card, d.ct, d.ox, d.oy, d.oa);
+      resetCard();
+      this._clickPlay(d.idx, d.card, d.ox, d.oy);
       return;
     }
+
     if (ptr.y < PLAY_LINE) {
-      this._tryPlay(d.idx, d.card, d.ct, d.ox, d.oy, d.oa);
+      if (d.card.type === 'minion' && d._snapSlot >= 0) {
+        this._playMinion(d.idx, d.card, d._snapSlot);
+      } else {
+        resetCard();
+        this._playSpell(d.idx, d.card, d.ox, d.oy);
+      }
     } else {
       d.ct.setDepth(30 + d.idx);
       this.tweens.add({
@@ -385,10 +613,35 @@ export default class PvpBattleScene extends Phaser.Scene {
     }
   }
 
-  _tryPlay(idx, card, ct, ox, oy, oa) {
+  _clickPlay(idx, card, ox, oy) {
+    if (card.type === 'minion') {
+      this._pendingPlay = { handIndex: idx, card };
+      this._positionMode = true;
+      this.redraw();
+    } else {
+      this._playSpell(idx, card, ox, oy);
+    }
+  }
+
+  _playMinion(handIdx, card, boardPos) {
     const nt = card.effect && (card.effect.target === 'enemy_any' || card.effect.target === 'friendly_minion');
     if (nt) {
-      ct.x = ox; ct.y = oy; ct.setAngle(oa); ct.setDepth(30 + idx); ct.setScale(1);
+      this.selecting = {
+        type: 'play', handIndex: handIdx, card,
+        needsFriendly: card.effect.target === 'friendly_minion',
+        boardPos
+      };
+      this._selOrigin = { x: W / 2, y: BOARD_Y.player };
+      this.targetMode = true;
+      this.redraw();
+    } else {
+      this._send({ type: 'pvp_play_card', handIndex: handIdx, target: null, boardPos });
+    }
+  }
+
+  _playSpell(idx, card, ox, oy) {
+    const nt = card.effect && (card.effect.target === 'enemy_any' || card.effect.target === 'friendly_minion');
+    if (nt) {
       this.selecting = {
         type: 'play', handIndex: idx, card,
         needsFriendly: card.effect.target === 'friendly_minion'
@@ -401,10 +654,43 @@ export default class PvpBattleScene extends Phaser.Scene {
     }
   }
 
+  /* ═══════ POSITION SLOTS (7 card-sized, click to place) ═══════ */
+  _showPositionSlots() {
+    const y = BOARD_Y.player;
+    const taken = this._occupiedSlots();
+    for (let s = 0; s < SLOT_COUNT; s++) {
+      if (taken.has(s)) continue;
+      const sx = SLOT_X(s);
+      const slot = this._ui(this.add.rectangle(sx, y, CARD_W, CARD_H, 0x2a1a3a, 0.35)
+        .setStrokeStyle(2, 0xaa44ff).setDepth(25));
+      slot.setInteractive({ useHandCursor: true });
+      slot.on('pointerover', () => {
+        slot.setFillStyle(0x442266, 0.65);
+        slot.setStrokeStyle(3, 0xcc66ff);
+      });
+      slot.on('pointerout', () => {
+        slot.setFillStyle(0x2a1a3a, 0.35);
+        slot.setStrokeStyle(2, 0xaa44ff);
+      });
+      slot.on('pointerdown', () => this._onPositionPick(s));
+    }
+  }
+
+  _onPositionPick(slotIdx) {
+    const pp = this._pendingPlay;
+    if (!pp) return;
+    this._positionMode = false;
+    this._pendingPlay = null;
+    this._playMinion(pp.handIndex, pp.card, slotIdx);
+  }
+
   _onTarget(info) {
     if (!this.selecting) return;
     if (this.selecting.type === 'play') {
-      this._send({ type: 'pvp_play_card', handIndex: this.selecting.handIndex, target: info });
+      this._send({
+        type: 'pvp_play_card', handIndex: this.selecting.handIndex,
+        target: info, boardPos: this.selecting.boardPos
+      });
     } else if (this.selecting.type === 'attack') {
       this._send({ type: 'pvp_attack', attackerUid: this.selecting.uid, target: info });
     }

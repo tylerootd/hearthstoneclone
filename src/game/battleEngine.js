@@ -51,8 +51,30 @@ function makeMinion(card) {
     maxHp: card.hp,
     effect: card.effect || null,
     triggers: card.triggers || [],
-    canAttack: false
+    keywords: card.keywords ? [...card.keywords] : [],
+    canAttack: false,
+    slot: -1
   };
+}
+
+export function guardianBlockingHero(attackerSlot, opponentBoard) {
+  return opponentBoard.find(
+    m => m.keywords.includes('guardian') && m.slot === attackerSlot
+  ) || null;
+}
+
+export function hasAnyGuardian(opponentBoard) {
+  return opponentBoard.some(m => m.keywords.includes('guardian'));
+}
+
+function nextFreeSlot(board) {
+  const taken = new Set(board.map(m => m.slot));
+  for (let s = 3, d = 0; d < MAX_BOARD; d++) {
+    const try1 = 3 + Math.ceil(d / 2) * (d % 2 === 0 ? 1 : -1);
+    if (try1 >= 0 && try1 < MAX_BOARD && !taken.has(try1)) return try1;
+  }
+  for (let s = 0; s < MAX_BOARD; s++) { if (!taken.has(s)) return s; }
+  return 0;
 }
 
 export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts = [], playerLevel = 99) {
@@ -168,7 +190,7 @@ export function canPlayCard(state, who, handIndex) {
   return true;
 }
 
-export function playCard(state, who, handIndex, targetInfo) {
+export function playCard(state, who, handIndex, targetInfo, boardPos) {
   const side = state[who];
   const opp  = who === 'player' ? state.enemy : state.player;
   const card = side.hand[handIndex];
@@ -185,6 +207,12 @@ export function playCard(state, who, handIndex, targetInfo) {
     if (side.artifacts && side.artifacts.includes('warcry_aura')) {
       minion.atk += 1;
       state.log.push(`  Warcry Aura: ${minion.name} gets +1 Attack`);
+    }
+    const taken = new Set(side.board.map(m => m.slot));
+    if (boardPos != null && boardPos >= 0 && boardPos < MAX_BOARD && !taken.has(boardPos)) {
+      minion.slot = boardPos;
+    } else {
+      minion.slot = nextFreeSlot(side.board);
     }
     side.board.push(minion);
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
@@ -260,6 +288,11 @@ export function minionAttack(state, who, attackerUid, targetInfo) {
   if (!attacker || !attacker.canAttack) return false;
 
   if (targetInfo.type === 'hero') {
+    const blocker = guardianBlockingHero(attacker.slot, opp.board);
+    if (blocker) {
+      state.log.push(`${blocker.name} (Guardian) blocks ${attacker.name}!`);
+      return false;
+    }
     opp.hp -= attacker.atk;
     state.log.push(`${attacker.name} attacks enemy hero for ${attacker.atk}`);
   } else if (targetInfo.type === 'minion') {
@@ -338,7 +371,10 @@ export function runEnemyTurn(state) {
   for (const attacker of attackers) {
     if (state.phase === 'over') return;
 
-    if (player.board.length > 0 && Math.random() < 0.5) {
+    const blocker = guardianBlockingHero(attacker.slot, player.board);
+    if (blocker) {
+      minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: blocker.uid });
+    } else if (player.board.length > 0 && Math.random() < 0.5) {
       const target = player.board[Math.floor(Math.random() * player.board.length)];
       minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: target.uid });
     } else {
