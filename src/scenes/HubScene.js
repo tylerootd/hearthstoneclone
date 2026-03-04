@@ -28,8 +28,8 @@ export default class HubScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const btns = [
-      { label: 'OVERWORLD',     y: 200, cb: () => this.scene.start('Overworld') },
-      { label: 'MMO MAP',       y: 255, cb: () => this.scene.start('MmoMap'), color: '#44ffaa' },
+      { label: 'SINGLEPLAYER',  y: 200, cb: () => this.scene.start('Overworld') },
+      { label: 'MULTIPLAYER',   y: 255, cb: () => this.scene.start('MmoMap'), color: '#44ffaa' },
       { label: 'CARD FORGE',    y: 310, cb: () => this.scene.start('Crafting') },
       { label: 'QUICK BATTLE',  y: 365, cb: () => this.scene.start('DeckSelect') },
       { label: 'DECK BUILDER',  y: 420, cb: () => this.scene.start('DeckBuilder') },
