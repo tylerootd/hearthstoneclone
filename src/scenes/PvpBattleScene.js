@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { getCardTextureKey } from '../utils/cardSprite.js';
 import { grantXp } from '../data/progression.js';
-import { loadCollection, saveCollection } from '../data/storage.js';
+import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from '../data/storage.js';
+import { rebuildPool } from '../data/cardPool.js';
 import { ARTIFACT_DEFS } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
@@ -19,14 +20,14 @@ export default class PvpBattleScene extends Phaser.Scene {
     this.selecting = null;
     this.targetMode = false;
     this.uiGroup = this.add.group();
-    this.gameOver = false;
+    this.resultShown = false;
 
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'pvp_state') {
+          if (this.resultShown) return;
           this.state = msg;
-          if (msg.phase === 'over') this.gameOver = true;
           this.selecting = null;
           this.targetMode = false;
           this.redraw();
@@ -239,99 +240,118 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   showResult() {
-    const overlay = this.add.rectangle(512, 384, W, H, 0x000000, 0.85);
-    this.uiGroup.add(overlay);
+    this.resultShown = true;
+    this.uiGroup.clear(true, true);
+    this.input.removeAllListeners();
 
     const won = this.state.winner === 'you';
     const isDraw = this.state.winner === 'draw';
 
-    // --- Punch animation ---
-    const winnerSprite = this.add.rectangle(won ? 430 : 594, 280, 48, 64, won ? 0x44ff44 : 0xff4444);
-    const loserSprite  = this.add.rectangle(won ? 594 : 430, 280, 48, 64, won ? 0xff4444 : 0x44ff44);
-    this.uiGroup.add(winnerSprite);
-    this.uiGroup.add(loserSprite);
-    this.uiGroup.add(this.add.text(winnerSprite.x, 236, 'WINNER', { ...FONT, fontSize: '9px', color: '#44ff44' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(loserSprite.x, 236, 'LOSER',  { ...FONT, fontSize: '9px', color: '#ff4444' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(winnerSprite.x, 350, won ? 'YOU' : 'OPP', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(loserSprite.x, 350, won ? 'OPP' : 'YOU', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
+    this.add.rectangle(512, 384, W, H, 0x000000).setDepth(100);
+
+    const winX = won ? 430 : 594;
+    const loseX = won ? 594 : 430;
+    const winnerBox = this.add.rectangle(winX, 200, 48, 64, 0x44ff44).setDepth(101);
+    const loserBox  = this.add.rectangle(loseX, 200, 48, 64, 0xff4444).setDepth(101);
+    this.add.text(winX, 156, 'WINNER', { ...FONT, fontSize: '9px', color: '#44ff44' }).setOrigin(0.5).setDepth(101);
+    this.add.text(loseX, 156, 'LOSER',  { ...FONT, fontSize: '9px', color: '#ff4444' }).setOrigin(0.5).setDepth(101);
+    this.add.text(winX, 248, won ? 'YOU' : 'OPP', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5).setDepth(101);
+    this.add.text(loseX, 248, won ? 'OPP' : 'YOU', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5).setDepth(101);
 
     this.tweens.add({
-      targets: winnerSprite,
-      x: loserSprite.x - 30,
+      targets: winnerBox,
+      x: loseX - 30,
       duration: 400,
       ease: 'Power2',
       yoyo: true,
       onYoyo: () => {
         this.cameras.main.shake(200, 0.01);
-        const bang = this.add.text(512, 280, 'POW!', { ...FONT, fontSize: '28px', color: '#ffcc00' }).setOrigin(0.5);
-        this.uiGroup.add(bang);
-        this.tweens.add({ targets: bang, alpha: 0, y: 250, duration: 600 });
+        const bang = this.add.text(512, 200, 'POW!', { ...FONT, fontSize: '28px', color: '#ffcc00' }).setOrigin(0.5).setDepth(102);
+        this.tweens.add({ targets: bang, alpha: 0, y: 170, duration: 600 });
       },
       onComplete: () => {
-        if (isDraw) this.showDrawScreen();
+        if (isDraw) this.showEndScreen('DRAW', '#e6b422', 'No victor this time.', '#ccc');
         else if (won) this.showWinScreen();
-        else this.showLoseScreen();
+        else this.showEndScreen('DEFEAT', '#ff4444', 'Your opponent stole one of your cards!\nTrain harder and reclaim your honor.', '#ff8888');
       }
     });
+  }
+
+  showEndScreen(title, color, subtitle, subColor) {
+    this.add.text(512, 300, title, { ...FONT, fontSize: '28px', color }).setOrigin(0.5).setDepth(102);
+    this.add.text(512, 340, subtitle, { ...FONT, fontSize: '11px', color: subColor, align: 'center' }).setOrigin(0.5).setDepth(102);
+    this.makeReturnButton(400);
   }
 
   showWinScreen() {
     grantXp(30);
-    this.uiGroup.add(this.add.text(512, 380, 'VICTORY!  +30 XP', { ...FONT, fontSize: '22px', color: '#44ff44' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(512, 410, 'Steal a card from your opponent\'s deck:', { ...FONT, fontSize: '11px', color: '#e6b422' }).setOrigin(0.5));
+    this.add.text(512, 290, 'VICTORY!  +30 XP', { ...FONT, fontSize: '22px', color: '#44ff44' }).setOrigin(0.5).setDepth(102);
+    this.add.text(512, 318, 'Steal a card from your opponent\'s deck:', { ...FONT, fontSize: '11px', color: '#e6b422' }).setOrigin(0.5).setDepth(102);
 
     const rewards = this.state.rewardCards || [];
     if (rewards.length === 0) {
-      this.uiGroup.add(this.add.text(512, 460, 'No cards available', { ...FONT, fontSize: '10px', color: '#aaa' }).setOrigin(0.5));
-      this.addReturnButton(520);
+      this.add.text(512, 370, 'No cards available', { ...FONT, fontSize: '10px', color: '#aaa' }).setOrigin(0.5).setDepth(102);
+      this.makeReturnButton(430);
       return;
     }
 
-    const startX = 512 - (rewards.length - 1) * 90;
+    const CW = 150, CH = 200, gap = 20;
+    const totalW = rewards.length * CW + (rewards.length - 1) * gap;
+    const baseX = 512 - totalW / 2 + CW / 2;
+
+    this.rewardBgs = [];
     rewards.forEach((card, i) => {
-      const cx = startX + i * 180;
-      const cy = 510;
-      const bg = this.add.rectangle(cx, cy, 150, 110, 0x223344).setInteractive({ useHandCursor: true });
-      bg.setStrokeStyle(2, 0x5577aa);
-      this.uiGroup.add(bg);
-      this.uiGroup.add(this.add.text(cx, cy - 40, card.name, { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
-      this.uiGroup.add(this.add.text(cx, cy - 20, `${card.cost}⬡  ${card.attack}⚔  ${card.hp}♥`, { ...FONT, fontSize: '10px', color: '#88bbff' }).setOrigin(0.5));
+      const cx = baseX + i * (CW + gap);
+      const cy = 460;
+
+      const bg = this.add.rectangle(cx, cy, CW, CH, 0x1a2a3a).setStrokeStyle(2, 0x5577aa).setDepth(103);
+      this.rewardBgs.push(bg);
+
+      const texKey = getCardTextureKey(this, card);
+      if (texKey) {
+        this.add.image(cx, cy - 40, texKey).setDisplaySize(CW - 16, 80).setDepth(104);
+      } else {
+        this.add.rectangle(cx, cy - 40, CW - 16, 80, 0x334455).setDepth(104);
+        this.add.text(cx, cy - 40, '?', { ...FONT, fontSize: '28px', color: '#556' }).setOrigin(0.5).setDepth(104);
+      }
+
+      this.add.text(cx, cy + 18, card.name, { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5).setDepth(104);
+      this.add.text(cx, cy + 38, `${card.cost}⬡  ${card.attack}⚔  ${card.hp}♥`, { ...FONT, fontSize: '10px', color: '#88bbff' }).setOrigin(0.5).setDepth(104);
 
       const desc = card.effect?.description || card.description || '';
       if (desc) {
-        this.uiGroup.add(this.add.text(cx, cy + 5, desc, { ...FONT, fontSize: '8px', color: '#ccc', wordWrap: { width: 130 } }).setOrigin(0.5, 0));
+        this.add.text(cx, cy + 55, desc, { ...FONT, fontSize: '8px', color: '#ccc', wordWrap: { width: CW - 16 } }).setOrigin(0.5, 0).setDepth(104);
       }
 
-      bg.on('pointerdown', () => {
-        const col = loadCollection() || [];
-        col.push(card.id);
-        saveCollection(col);
-        this.uiGroup.getAll().forEach(c => { if (c.input) c.removeInteractive(); });
-        this.uiGroup.add(this.add.text(512, 600, `${card.name} added to your collection!`, { ...FONT, fontSize: '14px', color: '#44ffaa' }).setOrigin(0.5));
-        bg.setStrokeStyle(3, 0x44ff44);
-        this.addReturnButton(650);
-      });
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerover', () => { if (bg.active) bg.setStrokeStyle(2, 0xffcc00); });
+      bg.on('pointerout',  () => { if (bg.active) bg.setStrokeStyle(2, 0x5577aa); });
+      bg.on('pointerdown', () => this.pickRewardCard(card, bg));
     });
   }
 
-  showLoseScreen() {
-    this.uiGroup.add(this.add.text(512, 390, 'DEFEAT', { ...FONT, fontSize: '28px', color: '#ff4444' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(512, 430, 'Your opponent stole one of your cards!', { ...FONT, fontSize: '11px', color: '#ff8888' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(512, 460, 'Train harder and reclaim your honor.', { ...FONT, fontSize: '10px', color: '#aaa' }).setOrigin(0.5));
-    this.addReturnButton(520);
+  pickRewardCard(card, chosenBg) {
+    const customs = loadCustomCards();
+    if (!customs.some(c => c.id === card.id)) {
+      customs.push(card);
+      saveCustomCards(customs);
+    }
+    const col = loadCollection() || [];
+    col.push(card.id);
+    saveCollection(col);
+    rebuildPool();
+
+    this.rewardBgs.forEach(bg => bg.removeInteractive());
+    chosenBg.setStrokeStyle(3, 0x44ff44);
+
+    this.add.text(512, 580, `${card.name} added to your collection!`, { ...FONT, fontSize: '14px', color: '#44ffaa' }).setOrigin(0.5).setDepth(105);
+    this.makeReturnButton(630);
   }
 
-  showDrawScreen() {
-    this.uiGroup.add(this.add.text(512, 390, 'DRAW', { ...FONT, fontSize: '28px', color: '#e6b422' }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(512, 430, 'No victor this time.', { ...FONT, fontSize: '11px', color: '#ccc' }).setOrigin(0.5));
-    this.addReturnButton(490);
-  }
-
-  addReturnButton(y) {
-    const btn = this.add.rectangle(512, y, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
+  makeReturnButton(y) {
+    const btn = this.add.rectangle(512, y, 240, 44, 0x334455).setInteractive({ useHandCursor: true }).setDepth(105);
     btn.setStrokeStyle(2, 0x5577aa);
-    this.uiGroup.add(btn);
-    this.uiGroup.add(this.add.text(512, y, 'RETURN TO MAP', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+    this.add.text(512, y, 'RETURN TO MAP', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5).setDepth(105);
     btn.on('pointerdown', () => this.returnToMap());
   }
 }

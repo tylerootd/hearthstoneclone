@@ -145,7 +145,7 @@ function pickRewardCards(loserDeck, count) {
   for (const card of pool) {
     if (!seen.has(card.id) && picks.length < count) {
       seen.add(card.id);
-      picks.push(stripSprite(card));
+      picks.push({ ...card });
     }
   }
   return picks;
