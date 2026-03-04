@@ -261,7 +261,7 @@ export default class MmoMapScene extends Phaser.Scene {
       if (this.challengeState === ST_CHALLENGING && this.challengePeer === msg.byId) {
         this.challengeState = ST_IDLE;
         this.challengePeer = null;
-        this.showStatus('Challenge declined', 2000);
+        this.showStatus('Duel declined', 2000);
       }
     }
 
@@ -387,12 +387,12 @@ export default class MmoMapScene extends Phaser.Scene {
       this.nearPlayerId = nearId;
 
       if (nearId) {
-        this.promptText.setText(`[E] Challenge Player ${nearId}`);
+        this.promptText.setText(`[E] Duel Player ${nearId}`);
         if (ePressed && this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.challengeState = ST_CHALLENGING;
           this.challengePeer = nearId;
           this.ws.send(JSON.stringify({ type: 'challenge', targetId: nearId }));
-          this.showStatus('Challenge sent! Waiting...', 0);
+          this.showStatus('Duel request sent! Waiting...', 0);
           console.log('[MMO] Sent challenge to', nearId);
         }
       } else {
@@ -408,7 +408,7 @@ export default class MmoMapScene extends Phaser.Scene {
           if (this.challengeState === ST_CHALLENGING) {
             this.challengeState = ST_IDLE;
             this.challengePeer = null;
-            this.showStatus('Challenge timed out', 2000);
+            this.showStatus('Duel request timed out', 2000);
           }
           this._challengeTimeout = null;
         });
@@ -416,11 +416,11 @@ export default class MmoMapScene extends Phaser.Scene {
     }
 
     else if (this.challengeState === ST_CHALLENGED) {
-      this.promptText.setText(`Player ${this.challengePeer} challenges you! [E] Accept  [Q] Decline`);
+      this.promptText.setText(`Player ${this.challengePeer} wants to duel! [E] Accept  [Q] Decline`);
 
       if (ePressed && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'accept', fromId: this.challengePeer }));
-        this.showStatus('Accepted! Starting battle...', 0);
+        this.showStatus('Accepted! Starting duel...', 0);
         console.log('[MMO] Accepted challenge from', this.challengePeer);
       }
 
@@ -428,7 +428,7 @@ export default class MmoMapScene extends Phaser.Scene {
         this.ws.send(JSON.stringify({ type: 'decline', fromId: this.challengePeer }));
         this.challengeState = ST_IDLE;
         this.challengePeer = null;
-        this.showStatus('Challenge declined', 2000);
+        this.showStatus('Duel declined', 2000);
         if (this._challengeTimeout) { this._challengeTimeout.destroy(); this._challengeTimeout = null; }
       }
     }

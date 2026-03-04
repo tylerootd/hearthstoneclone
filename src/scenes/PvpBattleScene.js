@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getCardTextureKey } from '../utils/cardSprite.js';
 import { grantXp } from '../data/progression.js';
+import { loadCollection, saveCollection } from '../data/storage.js';
 import { ARTIFACT_DEFS } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
@@ -33,7 +34,7 @@ export default class PvpBattleScene extends Phaser.Scene {
       } catch (e) { console.error('[PvP] message parse error:', e); }
     };
 
-    this.add.text(W / 2, H / 2, 'Waiting for battle state...', {
+    this.add.text(W / 2, H / 2, 'Waiting for duel to start...', {
       ...FONT, fontSize: '14px', color: '#aaa'
     }).setOrigin(0.5);
 
@@ -228,36 +229,109 @@ export default class PvpBattleScene extends Phaser.Scene {
     }
   }
 
+  returnToMap() {
+    this.scene.start('MmoMap', {
+      ws: this.ws,
+      myId: this.myId,
+      playerX: this.returnData.playerX,
+      playerY: this.returnData.playerY
+    });
+  }
+
   showResult() {
-    const overlay = this.add.rectangle(512, 384, W, H, 0x000000, 0.75);
+    const overlay = this.add.rectangle(512, 384, W, H, 0x000000, 0.85);
     this.uiGroup.add(overlay);
 
     const won = this.state.winner === 'you';
-    const msg = won ? 'VICTORY' : (this.state.winner === 'draw' ? 'DRAW' : 'DEFEAT');
-    this.uiGroup.add(this.add.text(512, 260, msg, {
-      ...FONT, fontSize: '36px', color: won ? '#44ff44' : '#ff4444'
-    }).setOrigin(0.5));
+    const isDraw = this.state.winner === 'draw';
 
-    this.uiGroup.add(this.add.text(512, 320, 'PvP Battle Complete', {
-      ...FONT, fontSize: '12px', color: '#e6b422'
-    }).setOrigin(0.5));
+    // --- Punch animation ---
+    const winnerSprite = this.add.rectangle(won ? 430 : 594, 280, 48, 64, won ? 0x44ff44 : 0xff4444);
+    const loserSprite  = this.add.rectangle(won ? 594 : 430, 280, 48, 64, won ? 0xff4444 : 0x44ff44);
+    this.uiGroup.add(winnerSprite);
+    this.uiGroup.add(loserSprite);
+    this.uiGroup.add(this.add.text(winnerSprite.x, 236, 'WINNER', { ...FONT, fontSize: '9px', color: '#44ff44' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(loserSprite.x, 236, 'LOSER',  { ...FONT, fontSize: '9px', color: '#ff4444' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(winnerSprite.x, 350, won ? 'YOU' : 'OPP', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(loserSprite.x, 350, won ? 'OPP' : 'YOU', { ...FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
 
-    if (won) {
-      grantXp(30);
-      this.uiGroup.add(this.add.text(512, 350, '+30 XP', { ...FONT, fontSize: '14px', color: '#44aaff' }).setOrigin(0.5));
+    this.tweens.add({
+      targets: winnerSprite,
+      x: loserSprite.x - 30,
+      duration: 400,
+      ease: 'Power2',
+      yoyo: true,
+      onYoyo: () => {
+        this.cameras.main.shake(200, 0.01);
+        const bang = this.add.text(512, 280, 'POW!', { ...FONT, fontSize: '28px', color: '#ffcc00' }).setOrigin(0.5);
+        this.uiGroup.add(bang);
+        this.tweens.add({ targets: bang, alpha: 0, y: 250, duration: 600 });
+      },
+      onComplete: () => {
+        if (isDraw) this.showDrawScreen();
+        else if (won) this.showWinScreen();
+        else this.showLoseScreen();
+      }
+    });
+  }
+
+  showWinScreen() {
+    grantXp(30);
+    this.uiGroup.add(this.add.text(512, 380, 'VICTORY!  +30 XP', { ...FONT, fontSize: '22px', color: '#44ff44' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(512, 410, 'Steal a card from your opponent\'s deck:', { ...FONT, fontSize: '11px', color: '#e6b422' }).setOrigin(0.5));
+
+    const rewards = this.state.rewardCards || [];
+    if (rewards.length === 0) {
+      this.uiGroup.add(this.add.text(512, 460, 'No cards available', { ...FONT, fontSize: '10px', color: '#aaa' }).setOrigin(0.5));
+      this.addReturnButton(520);
+      return;
     }
 
-    const btn = this.add.rectangle(512, 420, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
-    btn.setStrokeStyle(2, 0x5577aa);
-    this.uiGroup.add(btn);
-    this.uiGroup.add(this.add.text(512, 420, 'RETURN TO MAP', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
-    btn.on('pointerdown', () => {
-      this.scene.start('MmoMap', {
-        ws: this.ws,
-        myId: this.myId,
-        playerX: this.returnData.playerX,
-        playerY: this.returnData.playerY
+    const startX = 512 - (rewards.length - 1) * 90;
+    rewards.forEach((card, i) => {
+      const cx = startX + i * 180;
+      const cy = 510;
+      const bg = this.add.rectangle(cx, cy, 150, 110, 0x223344).setInteractive({ useHandCursor: true });
+      bg.setStrokeStyle(2, 0x5577aa);
+      this.uiGroup.add(bg);
+      this.uiGroup.add(this.add.text(cx, cy - 40, card.name, { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+      this.uiGroup.add(this.add.text(cx, cy - 20, `${card.cost}⬡  ${card.attack}⚔  ${card.hp}♥`, { ...FONT, fontSize: '10px', color: '#88bbff' }).setOrigin(0.5));
+
+      const desc = card.effect?.description || card.description || '';
+      if (desc) {
+        this.uiGroup.add(this.add.text(cx, cy + 5, desc, { ...FONT, fontSize: '8px', color: '#ccc', wordWrap: { width: 130 } }).setOrigin(0.5, 0));
+      }
+
+      bg.on('pointerdown', () => {
+        const col = loadCollection() || [];
+        col.push(card.id);
+        saveCollection(col);
+        this.uiGroup.getAll().forEach(c => { if (c.input) c.removeInteractive(); });
+        this.uiGroup.add(this.add.text(512, 600, `${card.name} added to your collection!`, { ...FONT, fontSize: '14px', color: '#44ffaa' }).setOrigin(0.5));
+        bg.setStrokeStyle(3, 0x44ff44);
+        this.addReturnButton(650);
       });
     });
+  }
+
+  showLoseScreen() {
+    this.uiGroup.add(this.add.text(512, 390, 'DEFEAT', { ...FONT, fontSize: '28px', color: '#ff4444' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(512, 430, 'Your opponent stole one of your cards!', { ...FONT, fontSize: '11px', color: '#ff8888' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(512, 460, 'Train harder and reclaim your honor.', { ...FONT, fontSize: '10px', color: '#aaa' }).setOrigin(0.5));
+    this.addReturnButton(520);
+  }
+
+  showDrawScreen() {
+    this.uiGroup.add(this.add.text(512, 390, 'DRAW', { ...FONT, fontSize: '28px', color: '#e6b422' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(512, 430, 'No victor this time.', { ...FONT, fontSize: '11px', color: '#ccc' }).setOrigin(0.5));
+    this.addReturnButton(490);
+  }
+
+  addReturnButton(y) {
+    const btn = this.add.rectangle(512, y, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
+    btn.setStrokeStyle(2, 0x5577aa);
+    this.uiGroup.add(btn);
+    this.uiGroup.add(this.add.text(512, y, 'RETURN TO MAP', { ...FONT, fontSize: '11px', color: '#fff' }).setOrigin(0.5));
+    btn.on('pointerdown', () => this.returnToMap());
   }
 }

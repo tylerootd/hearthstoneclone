@@ -117,6 +117,7 @@ function createPvpState(p1Cards, p2Cards, p1Arts, p2Arts) {
   const state = {
     player: { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle(p1Cards), hand: [], board: [], fatigue: 0, artifacts: p1Arts || [] },
     enemy:  { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle(p2Cards), hand: [], board: [], fatigue: 0, artifacts: p2Arts || [] },
+    origDecks: { player: [...p1Cards], enemy: [...p2Cards] },
     turn: 0, currentTurn: 'player', phase: 'playing', winner: null, log: []
   };
   if (state.player.artifacts.includes('mana_crystal')) { state.player.maxMana = 1; state.player.mana = 1; }
@@ -137,17 +138,35 @@ function stripSprite(obj) {
 function cleanHand(hand) { return hand.map(c => stripSprite(c)); }
 function cleanBoard(board) { return board.map(m => stripSprite(m)); }
 
+function pickRewardCards(loserDeck, count) {
+  const pool = shuffle([...loserDeck]);
+  const seen = new Set();
+  const picks = [];
+  for (const card of pool) {
+    if (!seen.has(card.id) && picks.length < count) {
+      seen.add(card.id);
+      picks.push(stripSprite(card));
+    }
+  }
+  return picks;
+}
+
 function viewFor(state, who) {
   const me = state[who]; const oppKey = who === 'player' ? 'enemy' : 'player'; const opp = state[oppKey];
   let winner = null;
   if (state.winner === who) winner = 'you';
   else if (state.winner === oppKey) winner = 'opponent';
   else if (state.winner === 'draw') winner = 'draw';
-  return {
+  const view = {
     you: { hp: me.hp, maxHp: me.maxHp, mana: me.mana, maxMana: me.maxMana, hand: cleanHand(me.hand), board: cleanBoard(me.board), deckCount: me.deck.length },
     opponent: { hp: opp.hp, maxHp: opp.maxHp, mana: opp.mana, maxMana: opp.maxMana, handCount: opp.hand.length, board: cleanBoard(opp.board), deckCount: opp.deck.length },
     yourTurn: state.currentTurn === who, turn: state.turn, phase: state.phase, winner, log: state.log.slice(-5)
   };
+  if (state.phase === 'over' && winner === 'you') {
+    const oppOrigDeck = state.origDecks[oppKey] || opp.deck;
+    view.rewardCards = pickRewardCards(oppOrigDeck, 3);
+  }
+  return view;
 }
 
 /* ═══════════════════ SERVER ═══════════════════ */
