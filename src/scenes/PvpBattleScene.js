@@ -35,7 +35,6 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._positionMode = false;
     this._pendingPlay = null;
     this._logOpen = false;
-    this._logGroup = null;
     this.resultShown = false;
 
     this.add.image(W / 2, H / 2, 'battle_board').setDisplaySize(W, H).setDepth(0);
@@ -425,69 +424,51 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   _log(s) {
-    this._pvpLog = s.log || [];
-    const btn = this._ui(this.add.rectangle(52, 278, 80, 28, 0x1a1a2e, 0.9)
-      .setStrokeStyle(2, 0x5566aa).setDepth(15));
-    this._ui(this.add.text(52, 278, 'LOG', {
-      ...FONT, fontSize: '10px', color: '#88aaff'
-    }).setOrigin(0.5).setDepth(16));
-    btn.setInteractive({ useHandCursor: true });
-    btn.on('pointerdown', () => this._toggleLog());
-    btn.on('pointerover', () => btn.setStrokeStyle(2, 0x88ccff));
-    btn.on('pointerout', () => btn.setStrokeStyle(2, 0x5566aa));
-  }
+    this._pvpLog = [...(this._pvpLog || [])];
+    if (s.log) s.log.forEach(l => { if (!this._pvpLog.includes(l)) this._pvpLog.push(l); });
 
-  _toggleLog() {
-    if (this._logOpen) { this._closeLog(); return; }
-    this._logOpen = true;
-    this._logGroup = this.add.group();
+    const tabW = 28, tabH = 80;
+    const tabX = this._logOpen ? 174 : 0;
+    const tab = this._ui(this.add.rectangle(tabX + tabW / 2, 278, tabW, tabH, 0x1a1a2e, 0.92)
+      .setStrokeStyle(2, 0x5566aa).setDepth(60));
+    this._ui(this.add.text(tabX + tabW / 2, 278,
+      this._logOpen ? '<' : 'L\nO\nG', {
+        ...FONT, fontSize: '8px', color: '#88aaff', align: 'center', lineSpacing: 2
+      }).setOrigin(0.5).setDepth(61));
+    tab.setInteractive({ useHandCursor: true });
+    tab.on('pointerdown', () => { this._logOpen = !this._logOpen; this.redraw(); });
+    tab.on('pointerover', () => tab.setStrokeStyle(2, 0x88ccff));
+    tab.on('pointerout', () => tab.setStrokeStyle(2, 0x5566aa));
 
-    const pw = 560, ph = 440;
-    const cx = W / 2, cy = H / 2;
+    if (!this._logOpen) return;
 
-    const overlay = this.add.rectangle(cx, cy, W, H, 0x000000, 0.6)
-      .setDepth(500).setInteractive();
-    this._logGroup.add(overlay);
+    const pw = 174, ph = 560;
+    const px = pw / 2, py = H / 2 - 20;
 
-    const panel = this.add.rectangle(cx, cy, pw, ph, 0x0c0c1e, 0.96)
-      .setStrokeStyle(3, 0x5566aa).setDepth(501);
-    this._logGroup.add(panel);
+    this._ui(this.add.rectangle(px, py, pw, ph, 0x0a0a18, 0.94)
+      .setStrokeStyle(2, 0x334466).setDepth(55));
 
-    this._logGroup.add(this.add.text(cx, cy - ph / 2 + 22, 'BATTLE LOG', {
-      ...FONT, fontSize: '14px', color: '#88aaff'
-    }).setOrigin(0.5).setDepth(502));
+    this._ui(this.add.text(px, py - ph / 2 + 14, 'BATTLE LOG', {
+      ...FONT, fontSize: '7px', color: '#6688cc'
+    }).setOrigin(0.5).setDepth(56));
 
-    this._logGroup.add(this.add.rectangle(cx, cy - ph / 2 + 40, pw - 40, 2, 0x334466)
-      .setDepth(502));
+    this._ui(this.add.rectangle(px, py - ph / 2 + 26, pw - 16, 1, 0x334466).setDepth(56));
 
     const entries = this._pvpLog || [];
-    const startY = cy - ph / 2 + 56;
-    const maxVisible = Math.floor((ph - 90) / 18);
+    const startY = py - ph / 2 + 34;
+    const lineH = 15;
+    const maxVisible = Math.floor((ph - 50) / lineH);
     const visible = entries.slice(-maxVisible);
     visible.forEach((line, i) => {
       const color = line.includes('dies') ? '#ff5555' :
         line.includes('attacks') || line.includes('hits') ? '#ffaa44' :
         line.includes('plays') ? '#66dd66' :
         line.includes('Guardian') ? '#33ddff' :
-        line.includes('Heals') || line.includes('heal') ? '#55ff99' : '#ccccdd';
-      this._logGroup.add(this.add.text(cx - pw / 2 + 28, startY + i * 18, line, {
-        ...FONT, fontSize: '8px', color, wordWrap: { width: pw - 56 }
-      }).setDepth(502));
+        line.includes('Heals') || line.includes('heal') ? '#55ff99' : '#aaaacc';
+      this._ui(this.add.text(8, startY + i * lineH, line, {
+        ...FONT, fontSize: '6px', color, wordWrap: { width: pw - 16 }
+      }).setDepth(56));
     });
-
-    const closeBtn = this.add.rectangle(cx + pw / 2 - 24, cy - ph / 2 + 22, 30, 22, 0x882233, 0.9)
-      .setStrokeStyle(2, 0xff4444).setDepth(503).setInteractive({ useHandCursor: true });
-    this._logGroup.add(closeBtn);
-    this._logGroup.add(this.add.text(cx + pw / 2 - 24, cy - ph / 2 + 22, 'X', {
-      ...FONT, fontSize: '10px', color: '#ff6666'
-    }).setOrigin(0.5).setDepth(504));
-    closeBtn.on('pointerdown', () => this._closeLog());
-    overlay.on('pointerdown', () => this._closeLog());
-  }
-
-  _closeLog() {
-    if (this._logGroup) { this._logGroup.clear(true, true); this._logGroup = null; }
-    this._logOpen = false;
   }
 
   /* ═══════ INPUT: POINTER DOWN (scene-level for hand cards) ═══════ */
