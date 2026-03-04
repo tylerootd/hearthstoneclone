@@ -216,11 +216,11 @@ wss.on('connection', (ws) => {
         if (oldRoom !== newRoom) {
           broadcastToRoom(oldRoom, { type: 'leave', id }, ws);
           me.room = newRoom;
-          me.x = msg.x || 0; me.y = msg.y || 0;
-          send(ws, { type: 'welcome', id, players: roomSnap(newRoom) });
-          broadcastToRoom(newRoom, { type: 'join', id, x: me.x, y: me.y, anim: me.anim }, ws);
           console.log(`[R] Player ${id}: ${oldRoom} → ${newRoom}`);
         }
+        me.x = msg.x || 0; me.y = msg.y || 0;
+        send(ws, { type: 'welcome', id, players: roomSnap(newRoom) });
+        broadcastToRoom(newRoom, { type: 'join', id, x: me.x, y: me.y, anim: me.anim }, ws);
         return;
       }
 
