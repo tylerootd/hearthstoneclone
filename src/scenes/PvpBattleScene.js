@@ -285,8 +285,36 @@ export default class PvpBattleScene extends Phaser.Scene {
 
   showWinScreen() {
     grantXp(30);
-    this.add.text(512, 290, 'VICTORY!  +30 XP', { ...FONT, fontSize: '22px', color: '#44ff44' }).setOrigin(0.5).setDepth(102);
-    this.add.text(512, 318, 'Steal a card from your opponent\'s deck:', { ...FONT, fontSize: '11px', color: '#e6b422' }).setOrigin(0.5).setDepth(102);
+
+    try {
+      const video = this.add.video(512, 400, 'win_anim');
+      video.setDisplaySize(480, 360);
+      video.setDepth(101);
+      video.setMute(true);
+      if (this.game.renderer.type === Phaser.WEBGL) {
+        video.setPostPipeline('ChromaKeyPostFX');
+      }
+      video.play(true);
+    } catch (e) { /* video unavailable */ }
+
+    const title = this.add.text(512, 80, 'VICTORY', {
+      ...FONT, fontSize: '48px', color: '#e6b422',
+      stroke: '#000000', strokeThickness: 6
+    }).setOrigin(0.5).setDepth(106);
+    title.setScale(0);
+    this.tweens.add({
+      targets: title, scaleX: 1, scaleY: 1,
+      duration: 600, ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: title, scaleX: 1.05, scaleY: 1.05,
+          duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+        });
+      }
+    });
+
+    this.add.text(512, 145, '+30 XP', { ...FONT, fontSize: '16px', color: '#44aaff' }).setOrigin(0.5).setDepth(106);
+    this.add.text(512, 178, 'Steal a card from your opponent\'s deck:', { ...FONT, fontSize: '11px', color: '#e6b422' }).setOrigin(0.5).setDepth(106);
 
     const rewards = this.state.rewardCards || [];
     if (rewards.length === 0) {

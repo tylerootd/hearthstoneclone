@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { initCardPool, getStarterCollection, getStarterDeck, getAllCards, getSpriteList } from '../data/cardPool.js';
 import { loadCollection, saveCollection, loadDeck, saveDeck, loadGold, saveGold, loadArtifacts } from '../data/storage.js';
 import { setBattleCardPoolRef } from '../game/battleEngine.js';
+import ChromaKeyPostFX from '../pipelines/ChromaKeyPostFX.js';
 
 export default class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -35,6 +36,12 @@ export default class BootScene extends Phaser.Scene {
     const TUXEMON = 'https://raw.githubusercontent.com/mikewesthad/phaser-3-tilemap-blog-posts/master/examples/post-1/assets';
     this.load.image('town-tiles', `${TUXEMON}/tilesets/tuxmon-sample-32px-extruded.png`);
     this.load.tilemapTiledJSON('town-map', `${TUXEMON}/tilemaps/tuxemon-town.json`);
+
+    this.load.video('win_anim', './Videos/Winning animation mmo pvp.mp4');
+
+    if (this.game.renderer.type === Phaser.WEBGL) {
+      this.game.renderer.pipelines.addPostPipeline('ChromaKeyPostFX', ChromaKeyPostFX);
+    }
 
     this.load.once('complete', () => {
       const arts = loadArtifacts();

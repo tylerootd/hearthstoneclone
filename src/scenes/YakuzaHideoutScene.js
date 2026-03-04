@@ -1,34 +1,50 @@
 import Phaser from 'phaser';
+import { loadDeck, loadArtifacts } from '../data/storage.js';
+import { generateEnemyDeck } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
 const FONT = { fontFamily: 'Arial, sans-serif' };
 const SPEED = 3;
-
 const ROOM_X = 112, ROOM_Y = 64, ROOM_W = 800, ROOM_H = 620;
-const BOSS_X = 512, BOSS_Y = 180;
 const TILE = 32;
+const INTERACT_R = 80;
 
-const BOSS_LINES = [
-  "You got guts walking in here, kid.",
-  "In this world, respect is everything... and you ain't earned mine yet.",
-  "Every card has a price. Every player has a debt.",
-  "I've been running this town since before you could shuffle a deck.",
-  "You want power? Power costs. Sit down, let's talk business.",
-  "The streets don't forget. Neither do I.",
-  "You think you're a big player? Prove it at the table.",
-  "I didn't build this empire by playing fair.",
-  "Cross me, and your cards won't be the only thing you lose.",
-  "Welcome to the Dragon's Den. Try not to embarrass yourself.",
-  "Money talks. Everything else walks.",
-  "I see that look in your eyes... ambition. Good. I can use that.",
-  "The house always wins. And I AM the house.",
-  "You remind me of myself... before I got smart.",
-  "Every king was once a pawn. Remember that.",
-  "Sit. Drink. We talk when I say we talk.",
-  "This city bows to me. You will too... eventually.",
-  "I've buried better duelists than you.",
-  "Don't touch the whiskey. That bottle costs more than your deck.",
-  "Loyalty or pain. Choose wisely."
+const NPCS = [
+  {
+    id: 'boss_ryuji', name: 'BOSS RYUJI', sprite: 'ninja_npc_samurai', scale: 4,
+    x: 512, y: 180, color: '#ff4488', glowColor: 0xff00aa,
+    lines: [
+      "You got guts walking in here, kid.",
+      "Every card has a price. Every player has a debt.",
+      "I've been running this town since before you could shuffle a deck.",
+      "The house always wins. And I AM the house.",
+      "I've buried better duelists than you.",
+      "Don't touch the whiskey. That bottle costs more than your deck."
+    ],
+    duelLine: "Think you can take me? Let's settle this at the table."
+  },
+  {
+    id: 'kira', name: 'KIRA', sprite: 'ninja_npc_green', scale: 3,
+    x: 280, y: 340, color: '#88ffaa', glowColor: 0x44ff88,
+    lines: [
+      "Boss Ryuji pulled me off the streets. I owe him everything.",
+      "Don't stare at me like that. I bite.",
+      "You want something? Earn it.",
+      "I shuffle cards faster than you can blink."
+    ],
+    duelLine: "You look like you need a lesson. Wanna duel?"
+  },
+  {
+    id: 'vex', name: 'VEX', sprite: 'ninja_npc_green', scale: 3,
+    x: 740, y: 340, color: '#aaaaff', glowColor: 0x6666ff, flipX: true,
+    lines: [
+      "Quiet. I'm counting cards in my head.",
+      "Last guy who challenged me is still crying.",
+      "The boss says I'm the best duelist in the Den.",
+      "You smell like a fresh recruit. Amusing."
+    ],
+    duelLine: "Alright, I'll humor you. Ready to get wrecked?"
+  }
 ];
 
 export default class YakuzaHideoutScene extends Phaser.Scene {
@@ -38,14 +54,15 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.ws = data.ws;
     this.myId = data.myId;
     this.returnData = { playerX: data.playerX, playerY: data.playerY };
-    this.lastBossLine = -1;
+    this.talkIndex = {};
+    this.dialogueLocked = false;
+    this.duelPromptActive = false;
 
     this.generateTextures();
     this.drawRoom();
     this.drawNeonSign();
     this.drawFurniture();
-    this.createBoss();
-    this.createBodyguards();
+    this.createNpcs();
     this.startSmoke();
     this.startAmbientDust();
     this.createPlayer();
@@ -53,7 +70,6 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.drawHud();
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
-    this.time.delayedCall(500, () => this.showBossLine());
   }
 
   generateTextures() {
@@ -91,10 +107,6 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     const neonT = this.add.rectangle(ROOM_X + ROOM_W / 2, ROOM_Y, ROOM_W, 3, 0x00ffcc).setDepth(2);
     this.tweens.add({ targets: [neonL, neonR], alpha: { from: 0.4, to: 1 }, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: neonT, alpha: { from: 0.5, to: 1 }, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    const floorStrip1 = this.add.rectangle(ROOM_X + ROOM_W / 2, ROOM_Y + 140, ROOM_W - 40, 2, 0x00ffcc, 0.15).setDepth(1);
-    const floorStrip2 = this.add.rectangle(ROOM_X + ROOM_W / 2, ROOM_Y + ROOM_H - 80, ROOM_W - 40, 2, 0xff00aa, 0.15).setDepth(1);
-    this.tweens.add({ targets: [floorStrip1, floorStrip2], alpha: { from: 0.05, to: 0.2 }, duration: 2000, yoyo: true, repeat: -1 });
   }
 
   drawNeonSign() {
@@ -110,18 +122,11 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       targets: sign, duration: 2000, yoyo: true, repeat: -1,
       onUpdate: (tween) => {
         const t = tween.progress;
-        sign.setTint(
-          Phaser.Display.Color.GetColor(
-            Math.floor(255 * (1 - t)),
-            Math.floor(255 * (0.5 + t * 0.5)),
-            Math.floor(200 + 55 * t)
-          )
-        );
+        sign.setTint(Phaser.Display.Color.GetColor(
+          Math.floor(255 * (1 - t)), Math.floor(255 * (0.5 + t * 0.5)), Math.floor(200 + 55 * t)
+        ));
       }
     });
-
-    const glow = this.add.rectangle(W / 2, signY, 360, 40, 0x00ffcc, 0.08).setDepth(2);
-    this.tweens.add({ targets: glow, alpha: { from: 0.04, to: 0.12 }, scaleX: { from: 1, to: 1.05 }, duration: 1500, yoyo: true, repeat: -1 });
 
     this.add.text(W / 2, signY + 22, '龍', {
       fontFamily: 'serif', fontSize: '16px', color: '#ff00aa'
@@ -130,7 +135,6 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
 
   drawFurniture() {
     const d = 5;
-
     this.drawSofa(ROOM_X + 60, ROOM_Y + 200, 130, 55, d);
     this.drawSofa(ROOM_X + ROOM_W - 190, ROOM_Y + 200, 130, 55, d);
     this.drawSofa(ROOM_X + 60, ROOM_Y + 400, 130, 55, d);
@@ -142,22 +146,15 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
 
     this.add.rectangle(tblX - 50, tblY - 15, 12, 28, 0x2a6622).setDepth(d + 1);
     this.add.rectangle(tblX - 50, tblY - 30, 8, 4, 0x44aa33).setDepth(d + 1);
-
     this.add.rectangle(tblX - 20, tblY - 10, 10, 22, 0x663311).setDepth(d + 1);
-    this.add.rectangle(tblX - 20, tblY - 22, 6, 3, 0x885522).setDepth(d + 1);
-
     this.add.rectangle(tblX + 15, tblY - 8, 14, 30, 0x556688).setDepth(d + 1);
-    this.add.rectangle(tblX + 15, tblY - 24, 10, 3, 0x7799bb).setDepth(d + 1);
-
     this.add.circle(tblX + 50, tblY - 5, 7, 0x333344).setStrokeStyle(1, 0x555566).setDepth(d + 1);
-    this.add.circle(tblX + 50, tblY + 20, 7, 0x333344).setStrokeStyle(1, 0x555566).setDepth(d + 1);
-
-    this.add.rectangle(tblX + 70, tblY + 10, 18, 10, 0x444444).setStrokeStyle(1, 0x666666).setDepth(d + 1);
-    this.add.circle(tblX + 72, tblY + 8, 2, 0xff4400, 0.8).setDepth(d + 2);
 
     const chairW = 60, chairH = 50;
-    this.add.rectangle(BOSS_X, BOSS_Y + 12, chairW + 16, chairH + 10, 0x330022).setStrokeStyle(2, 0xff00aa).setDepth(d - 1);
-    this.add.rectangle(BOSS_X, BOSS_Y - 10, chairW + 24, 14, 0x440033).setStrokeStyle(1, 0xcc0088).setDepth(d - 1);
+    this.add.rectangle(NPCS[0].x, NPCS[0].y + 12, chairW + 16, chairH + 10, 0x330022)
+      .setStrokeStyle(2, 0xff00aa).setDepth(d - 1);
+    this.add.rectangle(NPCS[0].x, NPCS[0].y - 10, chairW + 24, 14, 0x440033)
+      .setStrokeStyle(1, 0xcc0088).setDepth(d - 1);
   }
 
   drawSofa(x, y, w, h, depth) {
@@ -166,46 +163,38 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.add.rectangle(x + w / 2, y + h / 2, w - 10, h - 12, 0x4a1228).setDepth(depth);
   }
 
-  /* ═══════ BOSS & GUARDS ═══════ */
+  /* ═══════ NPCS ═══════ */
 
-  createBoss() {
-    this.bossSprite = this.add.sprite(BOSS_X, BOSS_Y, 'ninja_npc_samurai', 0)
-      .setScale(4).setDepth(7);
+  createNpcs() {
+    this.npcSprites = [];
+    for (const npc of NPCS) {
+      const spr = this.add.sprite(npc.x, npc.y, npc.sprite, 0)
+        .setScale(npc.scale).setDepth(7);
+      if (npc.flipX) spr.setFlipX(true);
 
-    const glow = this.add.circle(BOSS_X, BOSS_Y, 40, 0xff00aa, 0.06).setDepth(3);
-    this.tweens.add({ targets: glow, alpha: { from: 0.03, to: 0.1 }, scale: { from: 1, to: 1.3 }, duration: 2000, yoyo: true, repeat: -1 });
+      const glow = this.add.circle(npc.x, npc.y, 40, npc.glowColor, 0.06).setDepth(3);
+      this.tweens.add({ targets: glow, alpha: { from: 0.03, to: 0.1 }, scale: { from: 1, to: 1.3 }, duration: 2000, yoyo: true, repeat: -1 });
 
-    this.add.text(BOSS_X, BOSS_Y - 48, 'BOSS RYUJI', {
-      ...FONT, fontSize: '10px', fontStyle: 'bold', color: '#ff4488',
-      stroke: '#000', strokeThickness: 3
-    }).setOrigin(0.5).setDepth(8);
-  }
+      this.add.text(npc.x, npc.y - 48, npc.name, {
+        ...FONT, fontSize: '10px', fontStyle: 'bold', color: npc.color,
+        stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(8);
 
-  createBodyguards() {
-    const guardY = BOSS_Y + 50;
-    this.add.sprite(BOSS_X - 100, guardY, 'ninja_npc_green', 0).setScale(2.5).setDepth(6);
-    this.add.sprite(BOSS_X + 100, guardY, 'ninja_npc_green', 0).setScale(2.5).setDepth(6).setFlipX(true);
-
-    this.add.text(BOSS_X - 100, guardY - 28, 'GUARD', {
-      ...FONT, fontSize: '7px', color: '#88ffaa', stroke: '#000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(8);
-    this.add.text(BOSS_X + 100, guardY - 28, 'GUARD', {
-      ...FONT, fontSize: '7px', color: '#88ffaa', stroke: '#000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(8);
+      this.npcSprites.push(spr);
+      this.talkIndex[npc.id] = 0;
+    }
   }
 
   /* ═══════ PARTICLES ═══════ */
 
   startSmoke() {
+    const boss = NPCS[0];
     this.time.addEvent({
       delay: 350, repeat: -1,
       callback: () => {
         const s = this.add.image(
-          BOSS_X + Phaser.Math.Between(-6, 6),
-          BOSS_Y - 28,
-          'smoke_dot'
-        ).setDepth(9).setAlpha(0.25).setScale(Phaser.Math.FloatBetween(0.4, 1))
-          .setTint(0x999999);
+          boss.x + Phaser.Math.Between(-6, 6), boss.y - 28, 'smoke_dot'
+        ).setDepth(9).setAlpha(0.25).setScale(Phaser.Math.FloatBetween(0.4, 1)).setTint(0x999999);
         this.tweens.add({
           targets: s, y: s.y - 70, alpha: 0, scale: s.scale * 2.5,
           duration: 2200, onComplete: () => s.destroy()
@@ -250,7 +239,9 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     };
     this.keyE = this.input.keyboard.addKey('E');
     this.keyEPrev = false;
-    this.input.keyboard.on('keydown-ESC', () => this.exitToMap());
+    this.input.keyboard.on('keydown-ESC', () => {
+      if (!this.duelPromptActive) this.exitToMap();
+    });
   }
 
   /* ═══════ HUD ═══════ */
@@ -260,7 +251,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       ...FONT, fontSize: '14px', fontStyle: 'bold', color: '#ff00aa',
       stroke: '#000', strokeThickness: 3
     }).setDepth(50);
-    this.add.text(16, 32, 'ESC = leave  |  E = talk to boss', {
+    this.add.text(16, 32, 'ESC = leave  |  E = interact', {
       ...FONT, fontSize: '10px', color: '#aaa', stroke: '#000', strokeThickness: 2
     }).setDepth(50);
 
@@ -275,29 +266,114 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(50);
   }
 
-  showBossLine() {
-    let idx;
-    do { idx = Phaser.Math.Between(0, BOSS_LINES.length - 1); } while (idx === this.lastBossLine);
-    this.lastBossLine = idx;
+  /* ═══════ DIALOGUE & DUEL PROMPT ═══════ */
+
+  talkToNpc(npc) {
+    if (this.dialogueLocked) return;
+    this.dialogueLocked = true;
+
+    const idx = this.talkIndex[npc.id];
+    const isLastLine = idx >= npc.lines.length;
+    const line = isLastLine ? npc.duelLine : npc.lines[idx];
+    this.talkIndex[npc.id] = Math.min(idx + 1, npc.lines.length);
 
     this.dialogueBg.setVisible(true);
-    this.dialogueText.setText(`Boss Ryuji: "${BOSS_LINES[idx]}"`);
+    this.dialogueText.setText(`${npc.name}: "${line}"`);
 
     if (this.dialogueTimer) this.dialogueTimer.destroy();
-    this.dialogueTimer = this.time.delayedCall(5000, () => {
-      this.dialogueBg.setVisible(false);
-      this.dialogueText.setText('');
+
+    if (isLastLine) {
+      this.dialogueTimer = this.time.delayedCall(800, () => this.showDuelPrompt(npc));
+    } else {
+      this.dialogueTimer = this.time.delayedCall(3000, () => {
+        this.dialogueLocked = false;
+      });
+    }
+  }
+
+  showDuelPrompt(npc) {
+    this.duelPromptActive = true;
+
+    if (this.promptGroup) this.promptGroup.forEach(o => o.destroy());
+    this.promptGroup = [];
+
+    const bg = this.add.rectangle(W / 2, H / 2, 360, 140, 0x0a0520, 0.95)
+      .setStrokeStyle(2, 0xff00aa).setDepth(100);
+
+    const title = this.add.text(W / 2, H / 2 - 40, `Duel ${npc.name}?`, {
+      ...FONT, fontSize: '18px', fontStyle: 'bold', color: '#ff88cc',
+      stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setDepth(101);
+
+    const yesBtn = this.add.rectangle(W / 2 - 70, H / 2 + 20, 100, 40, 0x227722)
+      .setStrokeStyle(2, 0x44ff44).setDepth(101).setInteractive({ useHandCursor: true });
+    const yesLbl = this.add.text(W / 2 - 70, H / 2 + 20, 'YES', {
+      ...FONT, fontSize: '14px', fontStyle: 'bold', color: '#44ff44'
+    }).setOrigin(0.5).setDepth(102);
+
+    const noBtn = this.add.rectangle(W / 2 + 70, H / 2 + 20, 100, 40, 0x772222)
+      .setStrokeStyle(2, 0xff4444).setDepth(101).setInteractive({ useHandCursor: true });
+    const noLbl = this.add.text(W / 2 + 70, H / 2 + 20, 'NO', {
+      ...FONT, fontSize: '14px', fontStyle: 'bold', color: '#ff4444'
+    }).setOrigin(0.5).setDepth(102);
+
+    this.promptGroup = [bg, title, yesBtn, yesLbl, noBtn, noLbl];
+
+    yesBtn.on('pointerover', () => yesBtn.setFillStyle(0x33aa33));
+    yesBtn.on('pointerout', () => yesBtn.setFillStyle(0x227722));
+    noBtn.on('pointerover', () => noBtn.setFillStyle(0xaa3333));
+    noBtn.on('pointerout', () => noBtn.setFillStyle(0x772222));
+
+    yesBtn.on('pointerdown', () => this.startDuel(npc));
+    noBtn.on('pointerdown', () => this.closeDuelPrompt());
+  }
+
+  closeDuelPrompt() {
+    if (this.promptGroup) this.promptGroup.forEach(o => o.destroy());
+    this.promptGroup = [];
+    this.duelPromptActive = false;
+    this.dialogueLocked = false;
+    this.dialogueBg.setVisible(false);
+    this.dialogueText.setText('');
+  }
+
+  startDuel(npc) {
+    const playerDeck = loadDeck();
+    if (!playerDeck || playerDeck.length < 30) {
+      this.closeDuelPrompt();
+      this.dialogueBg.setVisible(true);
+      this.dialogueText.setText('You need a 30-card deck first! Visit the Deck Builder.');
+      this.dialogueLocked = false;
+      return;
+    }
+
+    const enemyDeck = generateEnemyDeck();
+    const artifacts = loadArtifacts();
+
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.time.delayedCall(300, () => {
+      this.scene.start('Battle', {
+        playerDeck, enemyDeck, artifacts,
+        npcId: npc.id, npcName: npc.name, xpReward: 25,
+        returnTo: 'YakuzaHideout',
+        playerX: this.returnData.playerX,
+        playerY: this.returnData.playerY,
+        ws: this.ws,
+        myId: this.myId
+      });
     });
   }
 
   /* ═══════ UPDATE ═══════ */
 
   update() {
+    if (this.duelPromptActive) return;
+
     let vx = 0, vy = 0;
-    if (this.keys.LEFT.isDown  || this.keys.A.isDown) { vx = -SPEED; this.playerDir = 'left'; }
+    if (this.keys.LEFT.isDown || this.keys.A.isDown) { vx = -SPEED; this.playerDir = 'left'; }
     else if (this.keys.RIGHT.isDown || this.keys.D.isDown) { vx = SPEED; this.playerDir = 'right'; }
-    if (this.keys.UP.isDown    || this.keys.W.isDown) { vy = -SPEED; this.playerDir = 'up'; }
-    else if (this.keys.DOWN.isDown  || this.keys.S.isDown) { vy = SPEED; this.playerDir = 'down'; }
+    if (this.keys.UP.isDown || this.keys.W.isDown) { vy = -SPEED; this.playerDir = 'up'; }
+    else if (this.keys.DOWN.isDown || this.keys.S.isDown) { vy = SPEED; this.playerDir = 'down'; }
 
     if (vx && vy) { vx *= 0.707; vy *= 0.707; }
 
@@ -308,13 +384,19 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     const animKey = moving ? 'walk_' + this.playerDir : 'idle_down';
     if (this.anims.exists(animKey)) this.player.play(animKey, true);
 
-    const bossDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, BOSS_X, BOSS_Y);
     const eTap = this.keyE.isDown && !this.keyEPrev;
     this.keyEPrev = this.keyE.isDown;
 
-    if (bossDist < 100) {
-      this.promptText.setText('[E] Talk to Boss Ryuji');
-      if (eTap) this.showBossLine();
+    let closestNpc = null;
+    let closestDist = Infinity;
+    for (const npc of NPCS) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, npc.x, npc.y);
+      if (d < INTERACT_R && d < closestDist) { closestNpc = npc; closestDist = d; }
+    }
+
+    if (closestNpc) {
+      this.promptText.setText(`[E] Talk to ${closestNpc.name}`);
+      if (eTap) this.talkToNpc(closestNpc);
     } else {
       this.promptText.setText('');
     }

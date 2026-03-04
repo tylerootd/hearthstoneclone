@@ -280,40 +280,71 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   showResult() {
-    const overlay = this.add.rectangle(512, 384, W, H, 0x000000, 0.75);
+    const overlay = this.add.rectangle(512, 384, W, H, 0x000000, 0.85);
     this.uiGroup.add(overlay);
 
     const won = this.bs.winner === 'player';
-    const msg = won ? 'VICTORY' : (this.bs.winner === 'draw' ? 'DRAW' : 'DEFEAT');
-    this.uiGroup.add(this.add.text(512, 180, msg, {
-      ...FONT, fontSize: '36px', color: won ? '#44ff44' : '#ff4444'
-    }).setOrigin(0.5));
-
     const returnTo = this.battleData.returnTo || 'Hub';
-    const returnData = { playerX: this.battleData.playerX, playerY: this.battleData.playerY };
-
-    if (won && this.battleData.xpReward) {
-      const xpAmt = this.battleData.xpReward;
-      const result = grantXp(xpAmt);
-      const npcName = this.battleData.npcName || 'Enemy';
-
-      this.uiGroup.add(this.add.text(512, 225, `Defeated ${npcName}!`, {
-        ...FONT, fontSize: '12px', color: '#e6b422'
-      }).setOrigin(0.5));
-      this.uiGroup.add(this.add.text(512, 250, `+${xpAmt} XP`, {
-        ...FONT, fontSize: '14px', color: '#44aaff'
-      }).setOrigin(0.5));
-
-      if (result.leveled) {
-        this.uiGroup.add(this.add.text(512, 275, `LEVEL UP! Now Level ${result.level}`, {
-          ...FONT, fontSize: '12px', color: '#ffcc00'
-        }).setOrigin(0.5));
-      }
-    }
+    const returnData = {
+      playerX: this.battleData.playerX, playerY: this.battleData.playerY,
+      ws: this.battleData.ws, myId: this.battleData.myId
+    };
 
     if (won) {
+      try {
+        const video = this.add.video(512, 380, 'win_anim');
+        video.setDisplaySize(480, 360);
+        video.setMute(true);
+        if (this.game.renderer.type === Phaser.WEBGL) {
+          video.setPostPipeline('ChromaKeyPostFX');
+        }
+        video.play(true);
+        this.uiGroup.add(video);
+      } catch (e) { /* video unavailable */ }
+
+      const title = this.add.text(512, 80, 'VICTORY', {
+        ...FONT, fontSize: '52px', color: '#e6b422',
+        stroke: '#000000', strokeThickness: 6
+      }).setOrigin(0.5);
+      title.setScale(0);
+      this.uiGroup.add(title);
+      this.tweens.add({
+        targets: title, scaleX: 1, scaleY: 1,
+        duration: 600, ease: 'Back.easeOut',
+        onComplete: () => {
+          this.tweens.add({
+            targets: title, scaleX: 1.05, scaleY: 1.05,
+            duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+          });
+        }
+      });
+
+      if (this.battleData.xpReward) {
+        const xpAmt = this.battleData.xpReward;
+        const result = grantXp(xpAmt);
+        const npcName = this.battleData.npcName || 'Enemy';
+
+        this.uiGroup.add(this.add.text(512, 140, `Defeated ${npcName}!`, {
+          ...FONT, fontSize: '12px', color: '#e6b422'
+        }).setOrigin(0.5));
+        this.uiGroup.add(this.add.text(512, 165, `+${xpAmt} XP`, {
+          ...FONT, fontSize: '14px', color: '#44aaff'
+        }).setOrigin(0.5));
+
+        if (result.leveled) {
+          this.uiGroup.add(this.add.text(512, 190, `LEVEL UP! Now Level ${result.level}`, {
+            ...FONT, fontSize: '12px', color: '#ffcc00'
+          }).setOrigin(0.5));
+        }
+      }
+
       this.showRewardPick(returnTo, returnData);
     } else {
+      const msg = this.bs.winner === 'draw' ? 'DRAW' : 'DEFEAT';
+      this.uiGroup.add(this.add.text(512, 180, msg, {
+        ...FONT, fontSize: '36px', color: '#ff4444'
+      }).setOrigin(0.5));
+
       const btnLabel = returnTo === 'Overworld' ? 'RETURN TO MAP' : 'RETURN TO HUB';
       const btn = this.add.rectangle(512, 420, 240, 44, 0x334455).setInteractive({ useHandCursor: true });
       btn.setStrokeStyle(2, 0x5577aa);
