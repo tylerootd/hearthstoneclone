@@ -22,7 +22,7 @@ export function initMp(scene, opts = {}) {
 }
 
 export function setupWs(scene) {
-  if (!scene.ws || scene.ws.readyState !== WebSocket.OPEN) return;
+  if (!scene.ws) return;
   scene.ws.onmessage = (event) => handleMsg(scene, JSON.parse(event.data));
   scene.ws.onclose = () => { if (scene.playerCountText) scene.playerCountText.setText('Disconnected'); };
 }
