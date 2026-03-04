@@ -8,6 +8,7 @@ const SPEED = 3;
 const ROOM_X = 112, ROOM_Y = 64, ROOM_W = 800, ROOM_H = 620;
 const TILE = 32;
 const INTERACT_R = 80;
+const SEND_RATE = 50;
 
 const NPCS = [
   {
@@ -58,6 +59,11 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.dialogueLocked = false;
     this.duelPromptActive = false;
     this.activeNpc = null;
+    this.remotePlayers = {};
+    this.lastSendTime = 0;
+    this.lastSentX = 0;
+    this.lastSentY = 0;
+    this.lastSentAnim = '';
 
     this.generateTextures();
     this.drawRoom();
@@ -69,6 +75,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     this.createPlayer();
     this.setupInput();
     this.drawHud();
+    this.setupMultiplayer();
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
@@ -261,6 +268,10 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       ...FONT, fontSize: '10px', color: '#aaa', stroke: '#000', strokeThickness: 2
     }).setDepth(50);
 
+    this.playerCountText = this.add.text(16, 48, 'Players in den: 1', {
+      ...FONT, fontSize: '10px', color: '#aaccee', stroke: '#000', strokeThickness: 2
+    }).setDepth(50);
+
     const exitBtn = this.add.rectangle(W - 70, 22, 120, 30, 0x441111, 0.9)
       .setStrokeStyle(2, 0xff4444).setDepth(50).setInteractive({ useHandCursor: true });
     this.add.text(W - 70, 22, 'EXIT [Q]', {
@@ -414,9 +425,59 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     });
   }
 
+  /* ═══════ MULTIPLAYER ═══════ */
+
+  setupMultiplayer() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      this.handleServerMessage(msg);
+    };
+    this.ws.onclose = () => {};
+  }
+
+  handleServerMessage(msg) {
+    if (msg.type === 'welcome') {
+      for (const [pid, pdata] of Object.entries(msg.players)) {
+        if (pid !== this.myId) {
+          this.addRemotePlayer(pid, pdata.x, pdata.y, pdata.anim);
+        }
+      }
+      this.updatePlayerCount();
+    } else if (msg.type === 'join') {
+      this.addRemotePlayer(msg.id, msg.x, msg.y, msg.anim);
+      this.updatePlayerCount();
+    } else if (msg.type === 'move') {
+      const r = this.remotePlayers[msg.id];
+      if (r) { r.targetX = msg.x; r.targetY = msg.y; r.anim = msg.anim || 'idle_down'; }
+    } else if (msg.type === 'leave') {
+      this.removeRemotePlayer(msg.id);
+      this.updatePlayerCount();
+    }
+  }
+
+  addRemotePlayer(id, x, y, anim) {
+    if (this.remotePlayers[id]) return;
+    const sprite = this.add.sprite(x, y, 'ninja_npc_green', 0).setDepth(6).setScale(2.5);
+    const tag = this.add.text(x, y - 26, `Player ${id}`, {
+      ...FONT, fontSize: '8px', color: '#aaffaa', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(11);
+    this.remotePlayers[id] = { sprite, tag, targetX: x, targetY: y, anim: anim || 'idle_down' };
+  }
+
+  removeRemotePlayer(id) {
+    const r = this.remotePlayers[id];
+    if (r) { r.sprite.destroy(); r.tag.destroy(); delete this.remotePlayers[id]; }
+  }
+
+  updatePlayerCount() {
+    const count = Object.keys(this.remotePlayers).length + 1;
+    if (this.playerCountText) this.playerCountText.setText(`Players in den: ${count}`);
+  }
+
   /* ═══════ UPDATE ═══════ */
 
-  update() {
+  update(time) {
     if (this.duelPromptActive) return;
 
     let vx = 0, vy = 0;
@@ -433,6 +494,26 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
     const moving = vx !== 0 || vy !== 0;
     const animKey = moving ? 'walk_' + this.playerDir : 'idle_down';
     if (this.anims.exists(animKey)) this.player.play(animKey, true);
+
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && time - this.lastSendTime > SEND_RATE) {
+      const px = Math.round(this.player.x);
+      const py = Math.round(this.player.y);
+      if (px !== this.lastSentX || py !== this.lastSentY || animKey !== this.lastSentAnim) {
+        this.ws.send(JSON.stringify({ type: 'move', x: px, y: py, anim: animKey }));
+        this.lastSentX = px; this.lastSentY = py; this.lastSentAnim = animKey;
+      }
+      this.lastSendTime = time;
+    }
+
+    for (const id of Object.keys(this.remotePlayers)) {
+      const r = this.remotePlayers[id];
+      r.sprite.x = Phaser.Math.Linear(r.sprite.x, r.targetX, 0.25);
+      r.sprite.y = Phaser.Math.Linear(r.sprite.y, r.targetY, 0.25);
+      r.tag.x = r.sprite.x;
+      r.tag.y = r.sprite.y - 26;
+      const remoteAnim = 'remote_' + (r.anim || 'idle_down');
+      if (this.anims.exists(remoteAnim)) r.sprite.play(remoteAnim, true);
+    }
 
     const eTap = this.keyE.isDown && !this.keyEPrev;
     const spaceTap = this.keySpace.isDown && !this.keySpacePrev;
@@ -474,6 +555,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
   exitToMap() {
     if (this._exiting) return;
     this._exiting = true;
+    for (const id of Object.keys(this.remotePlayers)) this.removeRemotePlayer(id);
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.time.delayedCall(300, () => {
       this.scene.start('MmoMap', {

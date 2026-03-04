@@ -39,7 +39,6 @@ export default class MmoMapScene extends Phaser.Scene {
     this.setupInput();
     this.drawHud();
 
-    // Reuse existing WS if returning from PvP battle
     if (data?.ws && data.ws.readyState === WebSocket.OPEN) {
       this.ws = data.ws;
       this.myId = data.myId;
@@ -47,8 +46,9 @@ export default class MmoMapScene extends Phaser.Scene {
       this.ws.onclose = () => { if (this.playerCountText) this.playerCountText.setText('Disconnected'); };
       this.challengeState = ST_IDLE;
       this.challengePeer = null;
-      // Ask server for current player list
-      this.ws.send(JSON.stringify({ type: 'sync' }));
+      const px = Math.round(data.playerX || 352);
+      const py = Math.round(data.playerY || 1216);
+      this.ws.send(JSON.stringify({ type: 'join_room', room: 'mmo', x: px, y: py }));
     } else {
       this.connectToServer();
     }
@@ -326,6 +326,9 @@ export default class MmoMapScene extends Phaser.Scene {
         cam.fadeOut(400, 0, 0, 0);
         this.time.delayedCall(400, () => {
           this.keepWs = true;
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'join_room', room: 'dragons_den', x: 400, y: 300 }));
+          }
           this.scene.start('YakuzaHideout', {
             ws: this.ws, myId: this.myId,
             playerX: this.player.x, playerY: this.player.y

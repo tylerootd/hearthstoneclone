@@ -185,15 +185,24 @@ function broadcastState(b) {
   } catch (e) { console.error('[!] broadcastState error:', e.message); }
 }
 
+function roomSnap(room) {
+  const snap = {};
+  players.forEach((p, pid) => { if (p.room === room) snap[pid] = { x: p.x, y: p.y, anim: p.anim }; });
+  return snap;
+}
+
+function broadcastToRoom(room, msg, exclude) {
+  const data = JSON.stringify(msg);
+  players.forEach((p) => { if (p.room === room && p.ws !== exclude && p.ws.readyState === 1) p.ws.send(data); });
+}
+
 wss.on('connection', (ws) => {
   const id = String(nextId++);
-  players.set(id, { x: 352, y: 1216, anim: 'idle_down', deckCards: null, artifacts: [], ws, battleId: null });
+  players.set(id, { x: 352, y: 1216, anim: 'idle_down', room: 'mmo', deckCards: null, artifacts: [], ws, battleId: null });
   console.log(`[+] Player ${id} joined (${players.size} online)`);
 
-  const snap = {};
-  players.forEach((p, pid) => { snap[pid] = { x: p.x, y: p.y, anim: p.anim }; });
-  send(ws, { type: 'welcome', id, players: snap });
-  broadcast({ type: 'join', id, x: 352, y: 1216, anim: 'idle_down' }, ws);
+  send(ws, { type: 'welcome', id, players: roomSnap('mmo') });
+  broadcastToRoom('mmo', { type: 'join', id, x: 352, y: 1216, anim: 'idle_down' }, ws);
 
   ws.on('message', (raw) => {
     try {
@@ -201,10 +210,24 @@ wss.on('connection', (ws) => {
       const me = players.get(id);
       if (!me) return;
 
+      if (msg.type === 'join_room') {
+        const oldRoom = me.room;
+        const newRoom = msg.room || 'mmo';
+        if (oldRoom !== newRoom) {
+          broadcastToRoom(oldRoom, { type: 'leave', id }, ws);
+          me.room = newRoom;
+          me.x = msg.x || 0; me.y = msg.y || 0;
+          send(ws, { type: 'welcome', id, players: roomSnap(newRoom) });
+          broadcastToRoom(newRoom, { type: 'join', id, x: me.x, y: me.y, anim: me.anim }, ws);
+          console.log(`[R] Player ${id}: ${oldRoom} → ${newRoom}`);
+        }
+        return;
+      }
+
       // ── overworld ──
       if (msg.type === 'move') {
         me.x = msg.x; me.y = msg.y; me.anim = msg.anim;
-        broadcast({ type: 'move', id, x: msg.x, y: msg.y, anim: msg.anim }, ws);
+        broadcastToRoom(me.room, { type: 'move', id, x: msg.x, y: msg.y, anim: msg.anim }, ws);
       }
       else if (msg.type === 'deck') {
         me.deckCards = (msg.cards || []).map(c => stripSprite(c));
@@ -212,9 +235,7 @@ wss.on('connection', (ws) => {
         console.log(`[i] Player ${id}: deck ${(msg.cards || []).length} cards`);
       }
       else if (msg.type === 'sync') {
-        const snap = {};
-        players.forEach((p, pid) => { snap[pid] = { x: p.x, y: p.y, anim: p.anim }; });
-        send(ws, { type: 'welcome', id, players: snap });
+        send(ws, { type: 'welcome', id, players: roomSnap(me.room) });
       }
       else if (msg.type === 'challenge') {
         const target = players.get(msg.targetId);
@@ -298,9 +319,10 @@ wss.on('connection', (ws) => {
         cleanupBattle(b);
       }
     }
+    const room = me ? me.room : 'mmo';
     players.delete(id);
     console.log(`[-] Player ${id} left (${players.size} online)`);
-    broadcast({ type: 'leave', id });
+    broadcastToRoom(room, { type: 'leave', id });
   });
 });
 
@@ -316,5 +338,7 @@ function broadcast(msg, exclude) {
   const data = JSON.stringify(msg);
   wss.clients.forEach(c => { if (c !== exclude && c.readyState === 1) c.send(data); });
 }
+
+// Legacy broadcast kept for non-room messages; room-aware version is broadcastToRoom
 
 console.log(`MMO server listening on port ${PORT}`);
