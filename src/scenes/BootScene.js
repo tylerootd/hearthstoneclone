@@ -38,6 +38,8 @@ export default class BootScene extends Phaser.Scene {
     this.load.tilemapTiledJSON('town-map', `${TUXEMON}/tilemaps/tuxemon-town.json`);
 
     this.load.image('dragons_den_building', './dragons_den.png');
+    this.load.image('battle_board', './battle_board.png');
+    this.load.image('card_frame', './card_frame.png');
     this.load.video('win_anim', './Videos/Winning animation mmo pvp.mp4');
 
     if (this.game.renderer.type === Phaser.WEBGL) {
