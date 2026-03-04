@@ -434,6 +434,9 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
       this.handleServerMessage(msg);
     };
     this.ws.onclose = () => {};
+    const px = Math.round(this.player.x);
+    const py = Math.round(this.player.y);
+    this.ws.send(JSON.stringify({ type: 'join_room', room: 'dragons_den', x: px, y: py }));
   }
 
   handleServerMessage(msg) {

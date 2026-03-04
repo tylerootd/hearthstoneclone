@@ -326,9 +326,6 @@ export default class MmoMapScene extends Phaser.Scene {
         cam.fadeOut(400, 0, 0, 0);
         this.time.delayedCall(400, () => {
           this.keepWs = true;
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'join_room', room: 'dragons_den', x: 400, y: 300 }));
-          }
           this.scene.start('YakuzaHideout', {
             ws: this.ws, myId: this.myId,
             playerX: this.player.x, playerY: this.player.y
