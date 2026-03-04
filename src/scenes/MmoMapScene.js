@@ -7,7 +7,8 @@ const ZOOM = 2;
 const FONT = { fontFamily: 'Arial, sans-serif' };
 const SEND_RATE = 50;
 const INTERACT_DIST = 48;
-const HIDEOUT_DOOR = { x: 192, y: 260 };
+const HIDEOUT_DOOR = { x: 352, y: 1140 };
+const HIDEOUT_DETECT = 50;
 
 // Challenge states
 const ST_IDLE = 0;
@@ -52,10 +53,7 @@ export default class MmoMapScene extends Phaser.Scene {
       this.connectToServer();
     }
 
-    const doorMarker = this.add.text(HIDEOUT_DOOR.x, HIDEOUT_DOOR.y - 14, '⬡', {
-      fontSize: '10px', color: '#ff00aa'
-    }).setOrigin(0.5).setDepth(11);
-    this.tweens.add({ targets: doorMarker, alpha: { from: 0.4, to: 1 }, duration: 800, yoyo: true, repeat: -1 });
+    this.drawHideoutBuilding();
 
     this.events.on('shutdown', () => this.cleanup());
   }
@@ -76,6 +74,15 @@ export default class MmoMapScene extends Phaser.Scene {
     this.mapW = map.widthInPixels;
     this.mapH = map.heightInPixels;
     this.physics.world.setBounds(0, 0, this.mapW, this.mapH);
+
+    const doorTX = Math.floor(HIDEOUT_DOOR.x / 32);
+    const doorTY = Math.floor(HIDEOUT_DOOR.y / 32);
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const t = this.worldLayer.getTileAt(doorTX + dx, doorTY + dy);
+        if (t) t.setCollision(false);
+      }
+    }
 
     const spawnObj = map.findObject('Objects', obj => obj.name === 'Spawn Point');
     this.spawnX = spawnObj ? spawnObj.x : 352;
@@ -301,6 +308,40 @@ export default class MmoMapScene extends Phaser.Scene {
     }
   }
 
+  /* ──────── hideout building on map ──────── */
+
+  drawHideoutBuilding() {
+    const dx = HIDEOUT_DOOR.x, dy = HIDEOUT_DOOR.y;
+    const bw = 64, bh = 48;
+
+    const building = this.add.rectangle(dx, dy - bh / 2 - 8, bw, bh, 0x120820)
+      .setStrokeStyle(2, 0xff00aa).setDepth(4);
+
+    const roof = this.add.rectangle(dx, dy - bh - 12, bw + 10, 8, 0x1a0a30)
+      .setStrokeStyle(1, 0xcc0088).setDepth(4);
+
+    const neonL = this.add.rectangle(dx - bw / 2, dy - bh / 2 - 8, 2, bh, 0x00ffcc).setDepth(5);
+    const neonR = this.add.rectangle(dx + bw / 2, dy - bh / 2 - 8, 2, bh, 0x00ffcc).setDepth(5);
+    this.tweens.add({ targets: [neonL, neonR], alpha: { from: 0.3, to: 1 }, duration: 600, yoyo: true, repeat: -1 });
+
+    this.add.text(dx, dy - bh - 20, "DRAGON'S\nDEN", {
+      fontFamily: 'Arial, sans-serif', fontSize: '7px', fontStyle: 'bold',
+      color: '#ff00aa', stroke: '#000', strokeThickness: 3, align: 'center'
+    }).setOrigin(0.5).setDepth(12);
+
+    const doorRect = this.add.rectangle(dx, dy - 4, 16, 12, 0x331144)
+      .setStrokeStyle(1, 0xff00aa).setDepth(5);
+
+    const glow = this.add.circle(dx, dy, 24, 0xff00aa, 0.12).setDepth(3);
+    this.tweens.add({ targets: glow, alpha: { from: 0.06, to: 0.18 }, scale: { from: 1, to: 1.4 }, duration: 1000, yoyo: true, repeat: -1 });
+
+    const arrow = this.add.text(dx, dy + 14, '▼ ENTER ▼', {
+      fontFamily: 'Arial, sans-serif', fontSize: '6px', fontStyle: 'bold',
+      color: '#00ffcc', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(12);
+    this.tweens.add({ targets: arrow, y: dy + 18, duration: 500, yoyo: true, repeat: -1 });
+  }
+
   /* ──────── building entry ──────── */
 
   enterHideout() {
@@ -415,7 +456,7 @@ export default class MmoMapScene extends Phaser.Scene {
         }
       } else {
         const doorDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, HIDEOUT_DOOR.x, HIDEOUT_DOOR.y);
-        if (doorDist < 40) {
+        if (doorDist < HIDEOUT_DETECT) {
           this.promptText.setText("[E] Enter Dragon's Den");
           if (ePressed) { this.enterHideout(); return; }
         } else {
