@@ -215,6 +215,10 @@ export function playCard(state, who, handIndex, targetInfo, boardPos) {
       minion.slot = nextFreeSlot(side.board);
     }
     side.board.push(minion);
+    if (minion.keywords.includes('rage')) {
+      minion.canAttack = true;
+      state.log.push(`  ${minion.name} has Rage — ready to attack!`);
+    }
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
   } else if (card.type === 'spell') {
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, null);

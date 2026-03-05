@@ -34,18 +34,22 @@ export default class HubScene extends Phaser.Scene {
       { label: 'QUICK BATTLE',  y: 365, cb: () => this.scene.start('DeckSelect') },
       { label: 'DECK BUILDER',  y: 420, cb: () => this.scene.start('DeckBuilder') },
       { label: 'MASTER MODE',   y: 475, cb: () => this.scene.start('MasterMode') },
+      { label: 'TUTORIAL',      y: 530, cb: () => this.scene.start('Tutorial'), color: '#ffcc44' },
       { label: 'RESET SAVE',    y: 580, cb: () => { resetSave(); this.scene.start('Boot'); } }
     ];
 
     btns.forEach(({ label, y, cb, color }) => {
-      const isMmo = !!color;
-      const fillBase = isMmo ? 0x0a2a1a : 0x1a2233;
-      const strokeBase = isMmo ? 0x226644 : 0x334466;
+      const isSpecial = !!color;
+      const isTutorial = color === '#ffcc44';
+      const fillBase = isTutorial ? 0x2a2210 : isSpecial ? 0x0a2a1a : 0x1a2233;
+      const strokeBase = isTutorial ? 0x665522 : isSpecial ? 0x226644 : 0x334466;
+      const hoverFill = isTutorial ? 0x3a3220 : isSpecial ? 0x1a3a2a : 0x2a3344;
+      const hoverStroke = isTutorial ? 0xffcc44 : isSpecial ? 0x44ffaa : 0x5588bb;
       const txtColor = color || '#aaccee';
       const bg = this.add.rectangle(512, y, 280, 48, fillBase).setInteractive({ useHandCursor: true });
       bg.setStrokeStyle(2, strokeBase);
       const txt = this.add.text(512, y, label, { ...FONT, fontSize: '14px', color: txtColor }).setOrigin(0.5);
-      bg.on('pointerover', () => { bg.setFillStyle(isMmo ? 0x1a3a2a : 0x2a3344); bg.setStrokeStyle(2, isMmo ? 0x44ffaa : 0x5588bb); txt.setColor('#ffffff'); });
+      bg.on('pointerover', () => { bg.setFillStyle(hoverFill); bg.setStrokeStyle(2, hoverStroke); txt.setColor('#ffffff'); });
       bg.on('pointerout',  () => { bg.setFillStyle(fillBase); bg.setStrokeStyle(2, strokeBase); txt.setColor(txtColor); });
       bg.on('pointerdown', cb);
     });

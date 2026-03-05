@@ -207,6 +207,14 @@ export default class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(14));
       }
 
+      const isRage = m.keywords && m.keywords.includes('rage');
+      if (isRage && !isGuardian) {
+        this._ui(this.add.text(x, y - 6, '\u{1F525}', { fontSize: '18px' }).setOrigin(0.5).setDepth(14));
+        this._ui(this.add.text(x, y + 10, 'RAGE', {
+          ...FONT, fontSize: '5px', color: '#ff6622', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(14));
+      }
+
       this._ui(this.add.circle(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, 10, 0xaa8800).setDepth(12));
       this._ui(this.add.text(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, `${m.atk}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
       this._ui(this.add.circle(x + CARD_W / 2 - 11, y + CARD_H / 2 - 13, 10, 0xbb2222).setDepth(12));
@@ -306,6 +314,11 @@ export default class BattleScene extends Phaser.Scene {
       if (card.keywords && card.keywords.includes('guardian'))
         ct.add(this.add.text(0, 46, '\u{1F6E1} GUARDIAN', {
           ...FONT, fontSize: '4px', color: '#eebb44'
+        }).setOrigin(0.5));
+
+      if (card.keywords && card.keywords.includes('rage'))
+        ct.add(this.add.text(0, card.keywords.includes('guardian') ? 53 : 46, '\u{1F525} RAGE', {
+          ...FONT, fontSize: '4px', color: '#ff6622'
         }).setOrigin(0.5));
 
       this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i });
