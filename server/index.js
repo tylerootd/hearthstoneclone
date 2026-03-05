@@ -2,7 +2,7 @@ const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
 
 /* ═══════════════════ BATTLE ENGINE (server-authoritative) ═══════════════════ */
-const MAX_HAND = 10, MAX_BOARD = 7, MAX_MANA = 10, STARTING_HP = 30;
+const MAX_HAND = 10, MAX_BOARD = 7, MAX_MANA = 10, STARTING_HP = 3000;
 
 function shuffle(a) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -50,9 +50,11 @@ function endTurnTriggers(state, who) {
   processTriggers(state, who, 'turn_end');
   const side = state[who];
   const opp = who === 'player' ? state.enemy : state.player;
+  /* ARTIFACTS DISABLED
   if (side.artifacts && side.artifacts.includes('fireball_turret') && state.phase !== 'over') {
-    opp.hp -= 3; state.log.push('Fireball Turret: 3 damage!'); checkWin(state);
+    opp.hp -= 300; state.log.push('Fireball Turret: 300 damage!'); checkWin(state);
   }
+  */
 }
 
 function processTriggers(state, who, timing) {
@@ -74,7 +76,8 @@ function playCard(state, who, handIndex, targetInfo, boardPos) {
   state.log.push(`${who} plays ${card.name}`);
   if (card.type === 'minion') {
     const minion = makeMinion(card);
-    if (side.artifacts && side.artifacts.includes('warcry_aura')) { minion.atk += 1; state.log.push(`Warcry Aura: +1 Atk`); }
+    /* ARTIFACTS DISABLED */
+    // if (side.artifacts && side.artifacts.includes('warcry_aura')) { minion.atk += 100; state.log.push(`Warcry Aura: +100 Atk`); }
     const taken = new Set(side.board.map(m => m.slot));
     if (boardPos != null && boardPos >= 0 && boardPos < MAX_BOARD && !taken.has(boardPos)) {
       minion.slot = boardPos;
@@ -145,8 +148,10 @@ function createPvpState(p1Cards, p2Cards, p1Arts, p2Arts) {
     origDecks: { player: [...p1Cards], enemy: [...p2Cards] },
     turn: 0, currentTurn: 'player', phase: 'playing', winner: null, log: []
   };
+  /* ARTIFACTS DISABLED
   if (state.player.artifacts.includes('mana_crystal')) { state.player.maxMana = 1; state.player.mana = 1; }
   if (state.enemy.artifacts.includes('mana_crystal')) { state.enemy.maxMana = 1; state.enemy.mana = 1; }
+  */
   for (let i = 0; i < 3; i++) drawCard(state, 'player');
   for (let i = 0; i < 4; i++) drawCard(state, 'enemy');
   return state;

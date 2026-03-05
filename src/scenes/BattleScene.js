@@ -15,6 +15,7 @@ const CARD_W = 88, CARD_H = 124;
 const BAR_H = 18;
 const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
+const STAT_FONT = { fontFamily: 'Arial Black, Impact, sans-serif', fontStyle: 'bold' };
 const BOARD_Y = { enemy: 155, player: 395 };
 const HERO_Y = { enemy: 42, player: 524 };
 const HAND_Y = 662;
@@ -84,6 +85,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   refresh() {
+    this._hideDmgPreview();
     this._nameMasks.forEach(m => m.destroy());
     this._nameMasks = [];
     this.uiGroup.clear(true, true);
@@ -133,7 +135,7 @@ export default class BattleScene extends Phaser.Scene {
 
   /* ═══════ HERO PANEL ═══════ */
   _heroPanel(x, y, side, label, isEnemy) {
-    const pw = 210, ph = 54;
+    const pw = 240, ph = 54;
     const fill = isEnemy ? 0x3a0a0a : 0x0a0a3a;
     const stroke = isEnemy ? 0x882233 : 0x223388;
     const bg = this._ui(this.add.rectangle(x, y, pw, ph, fill, 0.85).setStrokeStyle(2, stroke).setDepth(10));
@@ -144,13 +146,13 @@ export default class BattleScene extends Phaser.Scene {
 
     const pct = Math.max(0, side.hp / side.maxHp);
     const hpc = pct < 0.33 ? '#ff3333' : pct < 0.66 ? '#ffaa33' : '#44ff44';
-    this._ui(this.add.text(x - 32, y + 8, `${side.hp}`, {
-      ...FONT, fontSize: '16px', color: hpc
+    this._ui(this.add.text(x - 40, y + 8, `${side.hp}`, {
+      ...FONT, fontSize: '12px', color: hpc
     }).setOrigin(0.5).setDepth(11));
-    this._ui(this.add.text(x, y + 10, `/${side.maxHp}`, {
-      ...FONT, fontSize: '7px', color: '#777'
+    this._ui(this.add.text(x + 4, y + 10, `/${side.maxHp}`, {
+      ...FONT, fontSize: '6px', color: '#777'
     }).setOrigin(0, 0.5).setDepth(11));
-    this._ui(this.add.text(x + 72, y + 8, `Deck ${side.deck.length}`, {
+    this._ui(this.add.text(x + 82, y + 8, `Deck ${side.deck.length}`, {
       ...FONT, fontSize: '7px', color: '#999'
     }).setOrigin(0.5).setDepth(11));
 
@@ -167,8 +169,8 @@ export default class BattleScene extends Phaser.Scene {
       if (!blocked) {
         bg.setInteractive({ useHandCursor: true });
         bg.on('pointerdown', () => this._onTarget({ type: 'hero' }));
-        bg.on('pointerover', () => bg.setStrokeStyle(3, 0xff4444));
-        bg.on('pointerout', () => bg.setStrokeStyle(2, stroke));
+        bg.on('pointerover', () => { bg.setStrokeStyle(3, 0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(null, x, y, true); });
+        bg.on('pointerout', () => { bg.setStrokeStyle(2, stroke); this._hideDmgPreview(); });
       } else {
         const bx = W / 2, by = y;
         this._ui(this.add.rectangle(bx, by, 300, 36, 0x000000, 0.85).setStrokeStyle(2, 0xff4444).setDepth(100));
@@ -205,16 +207,17 @@ export default class BattleScene extends Phaser.Scene {
         .setStrokeStyle(1, 0xff0077).setDepth(10));
       this._ui(this.add.rectangle(x, barY + BAR_H / 2, CARD_W - 2, 1, 0x00ffee, 0.3)
         .setDepth(11));
+      const nameOff = 18;
       const nst = { ...FONT, fontSize: '7px', color: '#00ffee', stroke: '#002222', strokeThickness: 1 };
-      const nameText = this._ui(this.add.text(x, barY, m.name, nst).setOrigin(0.5).setDepth(12));
-      if (nameText.width > CARD_W - 8) {
+      const nameText = this._ui(this.add.text(x + nameOff / 2, barY, m.name, nst).setOrigin(0.5).setDepth(12));
+      if (nameText.width > CARD_W - nameOff - 6) {
         const maskGfx = this.make.graphics();
-        maskGfx.fillRect(x - CARD_W / 2 + 1, barY - BAR_H / 2, CARD_W - 2, BAR_H);
+        maskGfx.fillRect(x - CARD_W / 2 + nameOff, barY - BAR_H / 2, CARD_W - nameOff - 1, BAR_H);
         const geoMask = maskGfx.createGeometryMask();
         this._nameMasks.push(maskGfx);
         nameText.setOrigin(0, 0.5).setMask(geoMask);
         const gap = 40;
-        const sX1 = x - CARD_W / 2 + 2;
+        const sX1 = x - CARD_W / 2 + nameOff + 2;
         nameText.x = sX1;
         const nW = nameText.width;
         const sX2 = sX1 + nW + gap;
@@ -248,10 +251,22 @@ export default class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(14));
       }
 
-      this._ui(this.add.circle(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, 10, 0xaa8800).setDepth(12));
-      this._ui(this.add.text(x - CARD_W / 2 + 11, y + CARD_H / 2 - 13, `${m.atk}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
-      this._ui(this.add.circle(x + CARD_W / 2 - 11, y + CARD_H / 2 - 13, 10, 0xbb2222).setDepth(12));
-      this._ui(this.add.text(x + CARD_W / 2 - 11, y + CARD_H / 2 - 13, `${m.hp}`, { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(13));
+      const manaX = x - CARD_W / 2 + 9, manaY = barY;
+      this._ui(this.add.circle(manaX, manaY, 8, 0x1a3399).setStrokeStyle(1, 0x4488ff).setDepth(14));
+      this._ui(this.add.text(manaX, manaY, `${m.cost}`, { ...FONT, fontSize: '8px', color: '#fff' }).setOrigin(0.5).setDepth(15));
+      const atkBarY = y - CARD_H / 2 + BAR_H / 2;
+      this._ui(this.add.rectangle(x, atkBarY, CARD_W, BAR_H, 0x3d2800, 0.95).setStrokeStyle(1, 0xddaa22).setDepth(12));
+      this._ui(this.add.text(x - CARD_W / 2 + 10, atkBarY, '\u2694', { fontSize: '12px' }).setOrigin(0.5).setDepth(13));
+      this._ui(this.add.text(x + CARD_W / 2 - 10, atkBarY, '\u2694', { fontSize: '12px' }).setOrigin(0.5).setDepth(13));
+      this._ui(this.add.text(x, atkBarY, '' + m.atk, { ...STAT_FONT, fontSize: '11px', color: '#ffe066', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(13));
+
+      const hpBarBY = y + CARD_H / 2 + BAR_H / 2;
+      this._ui(this.add.rectangle(x, hpBarBY, CARD_W, BAR_H, 0x0a0a0a, 0.95).setStrokeStyle(1, 0x224422).setDepth(10));
+      const hpPct = Math.max(0, m.hp / m.maxHp);
+      const fillW = (CARD_W - 4) * hpPct;
+      const hpCol = hpPct > 0.5 ? 0x33cc44 : hpPct > 0.25 ? 0xccaa33 : 0xcc3333;
+      if (fillW > 0) this._ui(this.add.rectangle(x - (CARD_W - 4) / 2 + fillW / 2, hpBarBY, fillW, BAR_H - 4, hpCol, 0.9).setDepth(11));
+      this._ui(this.add.text(x, hpBarBY, m.hp + ' / ' + m.maxHp, { ...STAT_FONT, fontSize: '10px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(12));
 
       if (!m.canAttack && isPlayer)
         this._ui(this.add.text(x, y + 4, 'zzz', { ...FONT, fontSize: '7px', color: '#555' }).setOrigin(0.5).setDepth(13));
@@ -272,8 +287,8 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (this.targetMode && !isPlayer) {
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
-        fr.on('pointerover', () => fr.setStrokeStyle(3, 0xff4444));
-        fr.on('pointerout', () => fr.setStrokeStyle(isGuardian ? 3 : 2, bc));
+        fr.on('pointerover', () => { fr.setStrokeStyle(3, 0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(m, x, y, false); });
+        fr.on('pointerout', () => { fr.setStrokeStyle(isGuardian ? 3 : 2, bc); this._hideDmgPreview(); });
       }
       if (this.targetMode && isPlayer && this.selecting?.needsFriendly) {
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
@@ -318,28 +333,36 @@ export default class BattleScene extends Phaser.Scene {
         .setStrokeStyle(1, 0xff0077));
       ct.add(this.add.rectangle(0, -CARD_H / 2, CARD_W - 2, 1, 0x00ffee, 0.3));
       const barCY = -CARD_H / 2 - BAR_H / 2;
+      const handNameOff = 18;
+      ct.add(this.add.circle(-CARD_W / 2 + 9, barCY, 8, 0x1a3399).setStrokeStyle(1, 0x4488ff));
+      ct.add(this.add.text(-CARD_W / 2 + 9, barCY, `${card.cost}`, {
+        ...FONT, fontSize: '8px', color: '#fff'
+      }).setOrigin(0.5));
       const nStyle = { ...FONT, fontSize: '6px', color: '#00ffee', stroke: '#002222', strokeThickness: 1 };
-      const nt1 = this.add.text(0, barCY, card.name, nStyle).setOrigin(0.5);
+      const nt1 = this.add.text(handNameOff / 2, barCY, card.name, nStyle).setOrigin(0.5);
       ct.add(nt1);
       let hoverTween = null, nt2 = null;
-      const needsScroll = nt1.width > CARD_W - 8;
+      const needsScroll = nt1.width > CARD_W - handNameOff - 6;
       if (needsScroll) {
         nt1.setText(card.name.length > 10 ? card.name.slice(0, 9) + '..' : card.name);
       }
 
-      ct.add(this.add.circle(-CARD_W / 2 + 10, -CARD_H / 2 + 12, 10, 0x1a3399));
-      ct.add(this.add.text(-CARD_W / 2 + 10, -CARD_H / 2 + 12, `${card.cost}`, {
-        ...FONT, fontSize: '10px', color: '#fff'
-      }).setOrigin(0.5));
-
       if (card.type === 'minion') {
-        ct.add(this.add.circle(-CARD_W / 2 + 11, CARD_H / 2 - 13, 9, 0xaa8800));
-        ct.add(this.add.text(-CARD_W / 2 + 11, CARD_H / 2 - 13, `${card.atk}`, {
-          ...FONT, fontSize: '9px', color: '#fff'
+        const handAtkY = -CARD_H / 2 + BAR_H / 2;
+        ct.add(this.add.rectangle(0, handAtkY, CARD_W, BAR_H, 0x3d2800, 0.95)
+          .setStrokeStyle(1, 0xddaa22));
+        ct.add(this.add.text(-CARD_W / 2 + 10, handAtkY, '\u2694', { fontSize: '12px' }).setOrigin(0.5));
+        ct.add(this.add.text(CARD_W / 2 - 10, handAtkY, '\u2694', { fontSize: '12px' }).setOrigin(0.5));
+        ct.add(this.add.text(0, handAtkY, '' + card.atk, {
+          ...STAT_FONT, fontSize: '11px', color: '#ffe066', stroke: '#000', strokeThickness: 3
         }).setOrigin(0.5));
-        ct.add(this.add.circle(CARD_W / 2 - 11, CARD_H / 2 - 13, 9, 0xbb2222));
-        ct.add(this.add.text(CARD_W / 2 - 11, CARD_H / 2 - 13, `${card.hp}`, {
-          ...FONT, fontSize: '9px', color: '#fff'
+
+        ct.add(this.add.rectangle(0, CARD_H / 2 + BAR_H / 2, CARD_W, BAR_H, 0x0a0a0a, 0.95)
+          .setStrokeStyle(1, 0x224422));
+        const handFillW = CARD_W - 4;
+        ct.add(this.add.rectangle(0, CARD_H / 2 + BAR_H / 2, handFillW, BAR_H - 4, 0x33cc44, 0.9));
+        ct.add(this.add.text(0, CARD_H / 2 + BAR_H / 2, card.hp + ' / ' + card.hp, {
+          ...STAT_FONT, fontSize: '10px', color: '#fff', stroke: '#000', strokeThickness: 3
         }).setOrigin(0.5));
       } else {
         ct.add(this.add.text(0, CARD_H / 2 - 13, 'SPELL', {
@@ -563,19 +586,81 @@ export default class BattleScene extends Phaser.Scene {
     });
   }
 
-  /* ═══════ ARTIFACT BADGE ═══════ */
+  /* ═══════ ARTIFACT BADGE (DISABLED) ═══════ */
   _artifact() {
-    if (!this.playerArtifacts?.length) return;
-    const d = ARTIFACT_DEFS[this.playerArtifacts[0]];
-    if (!d) return;
-    this._ui(this.add.rectangle(72, 16, 130, 24, 0x0a0a1a, 0.85)
-      .setStrokeStyle(1, 0x333333).setDepth(15));
-    this._ui(this.add.text(20, 16, d.icon, {
-      fontSize: '14px', color: d.color
-    }).setOrigin(0.5).setDepth(16));
-    this._ui(this.add.text(44, 16, d.name, {
-      ...FONT, fontSize: '6px', color: '#e6b422'
-    }).setOrigin(0, 0.5).setDepth(16));
+    return; /* ARTIFACTS DISABLED */
+  }
+
+  /* ═══════ DAMAGE PREVIEW ON HOVER ═══════ */
+  _showDmgPreview(targetM, tx, ty, isHero) {
+    this._hideDmgPreview();
+    const attacker = this.bs.player.board.find(m => m.uid === this.selecting?.uid);
+    if (!attacker) return;
+    const els = [];
+    const D = 50;
+
+    if (isHero) {
+      const heroSide = this.bs.enemy;
+      const newHp = heroSide.hp - attacker.atk;
+      els.push(this.add.text(tx + 50, ty - 10, '-' + attacker.atk, {
+        ...STAT_FONT, fontSize: '14px', color: '#ff3333', stroke: '#000', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(D));
+      els.push(this.add.text(tx + 50, ty + 8, (newHp <= 0 ? 'LETHAL' : newHp + ' / ' + heroSide.maxHp), {
+        ...STAT_FONT, fontSize: '8px', color: newHp <= 0 ? '#ff0000' : '#ffaa33', stroke: '#000', strokeThickness: 2
+      }).setOrigin(0.5).setDepth(D));
+    } else {
+      const newDefHp = targetM.hp - attacker.atk;
+      const newAtkHp = attacker.hp - targetM.atk;
+      const hpBarBY = ty + CARD_H / 2 + BAR_H / 2;
+
+      els.push(this.add.rectangle(tx, ty, CARD_W, CARD_H, 0xff0000, 0.15).setDepth(D - 1));
+      els.push(this.add.text(tx, ty - 16, '-' + attacker.atk, {
+        ...STAT_FONT, fontSize: '12px', color: '#ff3333', stroke: '#000', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(D));
+      if (newDefHp <= 0) {
+        els.push(this.add.text(tx, ty + 6, 'DEAD', {
+          ...STAT_FONT, fontSize: '10px', color: '#ff0000', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(D));
+      }
+
+      els.push(this.add.rectangle(tx, hpBarBY, CARD_W, BAR_H, 0x0a0a0a, 0.95).setStrokeStyle(1, 0x662222).setDepth(D));
+      const prevPct = Math.max(0, newDefHp / targetM.maxHp);
+      const prevFillW = (CARD_W - 4) * prevPct;
+      const prevCol = newDefHp <= 0 ? 0x880000 : prevPct > 0.25 ? 0xccaa33 : 0xcc3333;
+      if (prevFillW > 0) els.push(this.add.rectangle(tx - (CARD_W - 4) / 2 + prevFillW / 2, hpBarBY, prevFillW, BAR_H - 4, prevCol, 0.9).setDepth(D + 1));
+      els.push(this.add.text(tx, hpBarBY, (newDefHp <= 0 ? 0 : newDefHp) + ' / ' + targetM.maxHp, {
+        ...STAT_FONT, fontSize: '10px', color: '#ff8888', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(D + 2));
+
+      const ax = SLOT_X(attacker.slot), ay = BOARD_Y.player;
+      const atkHpBarBY = ay + CARD_H / 2 + BAR_H / 2;
+      els.push(this.add.rectangle(ax, ay, CARD_W, CARD_H, 0xff6600, 0.12).setDepth(D - 1));
+      els.push(this.add.text(ax, ay - 10, '-' + targetM.atk, {
+        ...STAT_FONT, fontSize: '12px', color: '#ff8844', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(D));
+
+      els.push(this.add.rectangle(ax, atkHpBarBY, CARD_W, BAR_H, 0x0a0a0a, 0.95).setStrokeStyle(1, 0x662222).setDepth(D));
+      const atkPct = Math.max(0, newAtkHp / attacker.maxHp);
+      const atkFillW = (CARD_W - 4) * atkPct;
+      const atkCol = newAtkHp <= 0 ? 0x880000 : atkPct > 0.25 ? 0xccaa33 : 0xcc3333;
+      if (atkFillW > 0) els.push(this.add.rectangle(ax - (CARD_W - 4) / 2 + atkFillW / 2, atkHpBarBY, atkFillW, BAR_H - 4, atkCol, 0.9).setDepth(D + 1));
+      els.push(this.add.text(ax, atkHpBarBY, (newAtkHp <= 0 ? 0 : newAtkHp) + ' / ' + attacker.maxHp, {
+        ...STAT_FONT, fontSize: '10px', color: '#ff8888', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(D + 2));
+      if (newAtkHp <= 0) {
+        els.push(this.add.text(ax, ay + 8, 'DEAD', {
+          ...STAT_FONT, fontSize: '8px', color: '#ff0000', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(D));
+      }
+    }
+    this._dmgPreviewEls = els;
+  }
+
+  _hideDmgPreview() {
+    if (this._dmgPreviewEls) {
+      this._dmgPreviewEls.forEach(e => e.destroy());
+      this._dmgPreviewEls = null;
+    }
   }
 
   /* ═══════ INPUT: POINTER DOWN (scene-level for hand cards) ═══════ */

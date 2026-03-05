@@ -3,20 +3,20 @@ import { getCardById } from '../data/cardPool.js';
 const MAX_HAND = 10;
 const MAX_BOARD = 7;
 const MAX_MANA = 10;
-const STARTING_HP = 30;
+const STARTING_HP = 3000;
 
 export const ARTIFACT_DEFS = {
   warcry_aura: {
     id: 'warcry_aura',
     name: 'Warcry Aura',
-    description: 'All friendly minions get +1 Attack',
+    description: 'All friendly minions get +100 Attack',
     icon: '\u2694',
     color: '#ffcc44'
   },
   fireball_turret: {
     id: 'fireball_turret',
     name: 'Fireball Turret',
-    description: 'End of turn: Deal 3 damage to enemy hero',
+    description: 'End of turn: Deal 300 damage to enemy hero',
     icon: '\u2737',
     color: '#ff6644'
   },
@@ -106,11 +106,13 @@ export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts =
     playerLevel
   };
 
+  /* ARTIFACTS DISABLED
   if (arts.has('mana_crystal')) {
     state.player.maxMana = 1;
     state.player.mana = 1;
     state.log.push('Mana Crystal: Start with +1 mana!');
   }
+  */
 
   for (let i = 0; i < 3; i++) drawCard(state, 'player');
   for (let i = 0; i < 4; i++) drawCard(state, 'enemy');
@@ -157,13 +159,14 @@ export function endTurnTriggers(state, who) {
 }
 
 function processArtifactTriggers(state, who) {
+  return; /* ARTIFACTS DISABLED */
   const side = state[who];
   const opp = who === 'player' ? state.enemy : state.player;
   if (!side.artifacts) return;
 
   if (side.artifacts.includes('fireball_turret') && state.phase !== 'over') {
-    opp.hp -= 3;
-    state.log.push(`Fireball Turret: 3 damage to ${who === 'player' ? 'enemy' : 'player'} hero!`);
+    opp.hp -= 300;
+    state.log.push(`Fireball Turret: 300 damage to ${who === 'player' ? 'enemy' : 'player'} hero!`);
     checkWin(state);
   }
 }
@@ -204,10 +207,12 @@ export function playCard(state, who, handIndex, targetInfo, boardPos) {
   if (card.type === 'minion') {
     if (side.board.length >= MAX_BOARD) return false;
     const minion = makeMinion(card);
+    /* ARTIFACTS DISABLED
     if (side.artifacts && side.artifacts.includes('warcry_aura')) {
-      minion.atk += 1;
-      state.log.push(`  Warcry Aura: ${minion.name} gets +1 Attack`);
+      minion.atk += 100;
+      state.log.push(`  Warcry Aura: ${minion.name} gets +100 Attack`);
     }
+    */
     const taken = new Set(side.board.map(m => m.slot));
     if (boardPos != null && boardPos >= 0 && boardPos < MAX_BOARD && !taken.has(boardPos)) {
       minion.slot = boardPos;
