@@ -12,6 +12,7 @@ import {
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
+const BAR_H = 18;
 const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
 const BOARD_Y = { enemy: 155, player: 395 };
@@ -37,6 +38,7 @@ export default class BattleScene extends Phaser.Scene {
     this._positionMode = false;
     this._pendingPlay = null;
     this._logOpen = false;
+    this._nameMasks = [];
 
     const playerDeck = this.battleData.playerDeck || loadDeck() || [];
     const enemyDeck = this.battleData.enemyDeck || generateEnemyDeck();
@@ -82,6 +84,8 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   refresh() {
+    this._nameMasks.forEach(m => m.destroy());
+    this._nameMasks = [];
     this.uiGroup.clear(true, true);
     this._clearHand();
     const s = this.bs;
@@ -196,9 +200,38 @@ export default class BattleScene extends Phaser.Scene {
       if (this.textures.exists('card_frame'))
         this._ui(this.add.image(x, y - 2, 'card_frame').setDisplaySize(CARD_W, CARD_H).setDepth(11));
 
-      this._ui(this.add.text(x, y - CARD_H / 2 + 8, m.name.slice(0, 9), {
-        ...FONT, fontSize: '5px', color: '#ddd', backgroundColor: '#00000099', padding: { x: 2, y: 1 }
-      }).setOrigin(0.5).setDepth(12));
+      const barY = y - CARD_H / 2 - BAR_H / 2;
+      this._ui(this.add.rectangle(x, barY, CARD_W, BAR_H, 0x05050f, 0.95)
+        .setStrokeStyle(1, 0xff0077).setDepth(10));
+      this._ui(this.add.rectangle(x, barY + BAR_H / 2, CARD_W - 2, 1, 0x00ffee, 0.3)
+        .setDepth(11));
+      const nst = { ...FONT, fontSize: '7px', color: '#00ffee', stroke: '#002222', strokeThickness: 1 };
+      const nameText = this._ui(this.add.text(x, barY, m.name, nst).setOrigin(0.5).setDepth(12));
+      if (nameText.width > CARD_W - 8) {
+        const maskGfx = this.make.graphics();
+        maskGfx.fillRect(x - CARD_W / 2 + 1, barY - BAR_H / 2, CARD_W - 2, BAR_H);
+        const geoMask = maskGfx.createGeometryMask();
+        this._nameMasks.push(maskGfx);
+        nameText.setOrigin(0, 0.5).setMask(geoMask);
+        const gap = 40;
+        const sX1 = x - CARD_W / 2 + 2;
+        nameText.x = sX1;
+        const nW = nameText.width;
+        const sX2 = sX1 + nW + gap;
+        const nt2 = this._ui(this.add.text(sX2, barY, m.name, nst)
+          .setOrigin(0, 0.5).setDepth(12).setMask(geoMask));
+        const loopW = nW + gap;
+        this.tweens.addCounter({
+          from: 0, to: loopW,
+          duration: Math.max(3000, m.name.length * 180),
+          ease: 'Linear', repeat: -1,
+          onUpdate: function (tw) {
+            var off = tw.getValue();
+            nameText.x = sX1 - off;
+            nt2.x = sX2 - off;
+          }
+        });
+      }
 
       if (isGuardian) {
         this._ui(this.add.text(x, y - 6, '\u{1F6E1}', { fontSize: '22px' }).setOrigin(0.5).setDepth(14));
@@ -281,14 +314,22 @@ export default class BattleScene extends Phaser.Scene {
       if (this.textures.exists('card_frame'))
         ct.add(this.add.image(0, -2, 'card_frame').setDisplaySize(CARD_W, CARD_H));
 
+      ct.add(this.add.rectangle(0, -CARD_H / 2 - BAR_H / 2, CARD_W, BAR_H, 0x05050f, 0.95)
+        .setStrokeStyle(1, 0xff0077));
+      ct.add(this.add.rectangle(0, -CARD_H / 2, CARD_W - 2, 1, 0x00ffee, 0.3));
+      const barCY = -CARD_H / 2 - BAR_H / 2;
+      const nStyle = { ...FONT, fontSize: '6px', color: '#00ffee', stroke: '#002222', strokeThickness: 1 };
+      const nt1 = this.add.text(0, barCY, card.name, nStyle).setOrigin(0.5);
+      ct.add(nt1);
+      let hoverTween = null, nt2 = null;
+      const needsScroll = nt1.width > CARD_W - 8;
+      if (needsScroll) {
+        nt1.setText(card.name.length > 10 ? card.name.slice(0, 9) + '..' : card.name);
+      }
+
       ct.add(this.add.circle(-CARD_W / 2 + 10, -CARD_H / 2 + 12, 10, 0x1a3399));
       ct.add(this.add.text(-CARD_W / 2 + 10, -CARD_H / 2 + 12, `${card.cost}`, {
         ...FONT, fontSize: '10px', color: '#fff'
-      }).setOrigin(0.5));
-
-      ct.add(this.add.rectangle(0, 24, CARD_W - 8, 14, 0x000000, 0.8));
-      ct.add(this.add.text(0, 24, card.name.slice(0, 11), {
-        ...FONT, fontSize: '5px', color: '#eee'
       }).setOrigin(0.5));
 
       if (card.type === 'minion') {
@@ -321,9 +362,60 @@ export default class BattleScene extends Phaser.Scene {
           ...FONT, fontSize: '4px', color: '#ff6622'
         }).setOrigin(0.5));
 
-      this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i });
+      this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i, needsScroll, nt1, nt2, hoverTween, barCY, nStyle });
       this.handCards.push(ct);
     });
+  }
+
+  _startHandScroll(idx) {
+    const s = this._handSlots[idx];
+    if (!s || !s.needsScroll || s.hoverTween) return;
+    const gap = 40;
+    s.nt1.setText(s.card.name);
+    s.nt1.setOrigin(0, 0.5);
+    const localLeft = -CARD_W / 2 + 4;
+    s.nt1.x = localLeft;
+    const nameW = s.nt1.width;
+    const localLeft2 = localLeft + nameW + gap;
+    s.nt2 = this.add.text(localLeft2, s.barCY, s.card.name, s.nStyle).setOrigin(0, 0.5);
+    s.ct.add(s.nt2);
+
+    const scale = s.ct.scaleX;
+    const worldBarX = s.ct.x;
+    const worldBarY = s.ct.y + s.barCY * scale;
+    const worldBarW = (CARD_W - 2) * scale;
+    const worldBarH = BAR_H * scale;
+    const maskGfx = this.make.graphics();
+    maskGfx.fillRect(worldBarX - worldBarW / 2, worldBarY - worldBarH / 2, worldBarW, worldBarH);
+    const geoMask = maskGfx.createGeometryMask();
+    s.nt1.setMask(geoMask);
+    s.nt2.setMask(geoMask);
+    s._scrollMask = maskGfx;
+
+    const loopW = nameW + gap;
+    s.hoverTween = this.tweens.addCounter({
+      from: 0, to: loopW,
+      duration: Math.max(3000, s.card.name.length * 180),
+      ease: 'Linear', repeat: -1,
+      onUpdate: (tw) => {
+        const off = tw.getValue();
+        s.nt1.x = localLeft - off;
+        if (s.nt2) s.nt2.x = localLeft2 - off;
+      }
+    });
+  }
+
+  _stopHandScroll(idx) {
+    const s = this._handSlots[idx];
+    if (!s) return;
+    if (s.hoverTween) { s.hoverTween.stop(); s.hoverTween = null; }
+    if (s.nt1) s.nt1.clearMask();
+    if (s.nt2) { s.nt2.destroy(); s.nt2 = null; }
+    if (s._scrollMask) { s._scrollMask.destroy(); s._scrollMask = null; }
+    s.nt1.setOrigin(0.5, 0.5);
+    s.nt1.x = 0;
+    if (s.needsScroll) s.nt1.setText(s.card.name.length > 10 ? s.card.name.slice(0, 9) + '..' : s.card.name);
+    else s.nt1.setText(s.card.name);
   }
 
   /* ═══════ HAND HIT DETECTION (X-band, covers full card area) ═══════ */
@@ -366,11 +458,13 @@ export default class BattleScene extends Phaser.Scene {
     s.ct.angle = 0;
     const bg = s.ct.list[0];
     if (bg?.setStrokeStyle) bg.setStrokeStyle(3, 0xaa44ff);
+    this._startHandScroll(idx);
   }
 
   _unhoverSlot(idx) {
     const s = this._handSlots[idx];
     if (!s?.ct?.active) return;
+    this._stopHandScroll(idx);
     s.ct.setDepth(30 + idx);
     s.ct.y = s.cy;
     s.ct.scaleX = 1;
