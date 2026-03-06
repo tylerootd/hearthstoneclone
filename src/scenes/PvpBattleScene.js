@@ -84,6 +84,8 @@ export default class PvpBattleScene extends Phaser.Scene {
           this._pendingPlay = null;
           this._dragCard = null;
           this.arrowGfx.clear();
+          if (msg.skippedYourTurn) this._pvpBanner('YOU SKIP A TURN');
+          if (msg.gainedExtraTurn) this._pvpBanner('You gain an extra turn');
           this.redraw();
         }
         if (msg.type === 'pvp_opponent_hover') {
@@ -102,6 +104,25 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   _ui(o) { this.uiGroup.add(o); return o; }
+
+  _pvpBanner(text) {
+    const bg = this.add.rectangle(W / 2, H / 2, 400, 60, 0x000000, 0.9).setDepth(350).setScale(0, 1);
+    const tx = this.add.text(W / 2, H / 2, text, {
+      ...FONT, fontSize: text.length > 20 ? '12px' : '16px', color: '#ffe066'
+    }).setOrigin(0.5).setDepth(351).setAlpha(0);
+    this.tweens.add({
+      targets: bg, scaleX: 1, duration: 200, ease: 'Back.easeOut',
+      onComplete: () => {
+        tx.setAlpha(1);
+        this.time.delayedCall(1200, () => {
+          this.tweens.add({
+            targets: [bg, tx], alpha: 0, duration: 250,
+            onComplete: () => { bg.destroy(); tx.destroy(); }
+          });
+        });
+      }
+    });
+  }
   _clearHand() {
     this._handArtMasks.forEach(m => m.destroy());
     this._handArtMasks = [];

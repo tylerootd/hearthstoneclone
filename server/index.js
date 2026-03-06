@@ -36,6 +36,15 @@ function drawCard(state, who) {
 }
 
 function startTurn(state, who) {
+  if (state.skipNextTurn && state.skipNextTurn[who]) {
+    delete state.skipNextTurn[who];
+    state.log.push(`${who} skips their turn!`);
+    const other = who === 'player' ? 'enemy' : 'player';
+    state.lastSkippedTurn = who;
+    state.gainedExtraTurn = other;
+    startTurn(state, other);
+    return;
+  }
   const side = state[who];
   state.currentTurn = who;
   state.turn++;
@@ -106,7 +115,14 @@ function playCard(state, who, handIndex, targetInfo, boardPos) {
     }
     side.board.push(minion);
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
-  } else if (card.type === 'spell' && card.effect) { applyEffect(state, who, card.effect, targetInfo, null); }
+  } else if (card.type === 'spell' && card.effect) {
+    if (card.effect.kind === 'newShoes') {
+      const subEffect = (targetInfo && targetInfo.type === 'minion') ? card.effect.equipEffect : card.effect.skipEffect;
+      if (subEffect) applyEffect(state, who, subEffect, targetInfo, null);
+    } else {
+      applyEffect(state, who, card.effect, targetInfo, null);
+    }
+  }
   checkWin(state); return true;
 }
 
@@ -199,8 +215,9 @@ function applyEffect(state, who, effect, targetInfo, src) {
       break;
     }
     case 'skipOpponentTurn': {
-      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
-      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      const opp = who === 'player' ? 'enemy' : 'player';
+      if (!state.skipNextTurn) state.skipNextTurn = {};
+      state.skipNextTurn[opp] = true;
       break;
     }
     case 'dealDamageAll': {
@@ -212,6 +229,27 @@ function applyEffect(state, who, effect, targetInfo, src) {
     }
     case 'freeCardsThisTurn': {
       state.freeCardsThisTurn = who;
+      break;
+    }
+    case 'transformMinion': {
+      if (targetInfo?.type === 'minion') {
+        const idx = side.board.findIndex(m => m.uid === targetInfo.uid);
+        if (idx !== -1) {
+          const old = side.board[idx];
+          const reqId = effect.requireId;
+          if (!reqId || old.id === reqId) {
+            const newCard = (state.cardById || {})[effect.transformTo];
+            if (newCard && newCard.type === 'minion') {
+              const newMinion = makeMinion(newCard);
+              newMinion.slot = old.slot;
+              newMinion.canAttack = (newMinion.keywords || []).includes('rage');
+              newMinion.attackedThisTurn = false;
+              side.board[idx] = newMinion;
+              state.log.push(`${old.name} transforms into ${newMinion.name}!`);
+            }
+          }
+        }
+      }
       break;
     }
   }
@@ -295,6 +333,8 @@ function viewFor(state, who) {
     opponent: { hp: opp.hp, maxHp: opp.maxHp, mana: opp.mana, maxMana: opp.maxMana, handCount: opp.hand.length, board: cleanBoard(opp.board), deckCount: opp.deck.length },
     yourTurn: state.currentTurn === who, turn: state.turn, phase: state.phase, winner, log: state.log.slice(-5)
   };
+  if (state.lastSkippedTurn === who) view.skippedYourTurn = true;
+  if (state.gainedExtraTurn === who) view.gainedExtraTurn = true;
   if (state.phase === 'over' && winner === 'you') {
     const oppOrigDeck = state.origDecks[oppKey] || opp.deck;
     view.rewardCards = pickRewardCards(oppOrigDeck, 3);
@@ -466,6 +506,8 @@ wss.on('connection', (ws) => {
         }
 
         broadcastState(b);
+        if (b.state.lastSkippedTurn) b.state.lastSkippedTurn = null;
+        if (b.state.gainedExtraTurn) b.state.gainedExtraTurn = null;
 
         if (b.state.phase === 'over') {
           console.log(`[✓] Battle ${b.id} over: ${b.state.winner}`);

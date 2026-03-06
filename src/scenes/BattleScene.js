@@ -1604,6 +1604,15 @@ export default class BattleScene extends Phaser.Scene {
     startTurn(this.bs, 'enemy');
     if (this.bs.phase === 'over') { this._enemyTurn = false; this.refresh(); return; }
     this.refresh();
+    if (this.bs.currentTurn === 'player' && this.bs.gainedExtraTurn === 'player') {
+      this._banner('ENEMY SKIPS!');
+      this.time.delayedCall(900, () => {
+        this._banner('YOU GAIN AN EXTRA TURN');
+        this._enemyTurn = false;
+        this.refresh();
+      });
+      return;
+    }
     this._banner('ENEMY TURN');
     this.time.delayedCall(700, () => {
       runEnemyTurn(this.bs);

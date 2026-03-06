@@ -145,6 +145,16 @@ export function drawCard(state, who) {
 }
 
 export function startTurn(state, who) {
+  if (state.skipNextTurn && state.skipNextTurn[who]) {
+    delete state.skipNextTurn[who];
+    state.log.push(`  ${who} skips their turn!`);
+    const other = who === 'player' ? 'enemy' : 'player';
+    state.lastSkippedTurn = who;
+    state.gainedExtraTurn = other;
+    startTurn(state, other);
+    return;
+  }
+
   const side = state[who];
   state.currentTurn = who;
   state.turn++;
@@ -402,8 +412,9 @@ function applyEffect(state, who, effect, targetInfo, sourceMinion) {
       break;
     }
     case 'skipOpponentTurn': {
-      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
-      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      const opp = who === 'player' ? 'enemy' : 'player';
+      if (!state.skipNextTurn) state.skipNextTurn = {};
+      state.skipNextTurn[opp] = true;
       state.log.push(`  Opponent skips their next turn!`);
       break;
     }
