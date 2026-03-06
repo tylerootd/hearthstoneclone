@@ -2,7 +2,7 @@
   { "id": "base_wisp", "name": "Wisp", "type": "minion", "cost": 0, "atk": 100, "hp": 100, "sprite": "frost_wisp.png" },
   { "id": "base_murloc", "name": "Murloc Raider", "type": "minion", "cost": 1, "atk": 200, "hp": 100, "sprite": "slime.png" },
   { "id": "base_goldshire", "name": "Goldshire Footman", "type": "minion", "cost": 1, "atk": 100, "hp": 200, "sprite": "school_warrior.png", "keywords": ["guardian"] },
-  { "id": "base_raptor", "name": "Bloodfen Raptor", "type": "minion", "cost": 2, "atk": 300, "hp": 200, "sprite": "ice_wolf.png" },
+  { "id": "base_raptor", "name": "Bloodfen Raptor", "type": "minion", "cost": 2, "atk": 300, "hp": 200, "sprite": "ice_wolf.png", "gif": "ice_wolf.gif" },
   { "id": "base_croc", "name": "River Crocolisk", "type": "minion", "cost": 2, "atk": 200, "hp": 300, "sprite": "stone_golem.png" },
   { "id": "base_wolfrider", "name": "Wolfrider", "type": "minion", "cost": 3, "atk": 300, "hp": 100, "sprite": "shadow_fighter.png", "keywords": ["rage"] },
   { "id": "base_shieldmasta", "name": "Sen'jin Shieldmasta", "type": "minion", "cost": 4, "atk": 300, "hp": 500, "sprite": "golden_knight.png", "keywords": ["guardian"] },
