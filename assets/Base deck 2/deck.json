@@ -1,0 +1,18 @@
+{
+  "id": "base_deck_2",
+  "name": "Base Deck 2",
+  "cards": [
+    "bd2_cool_stick", "bd2_cool_stick",
+    "bd2_cardboard_box", "bd2_cardboard_box",
+    "bd2_beg", "bd2_beg",
+    "bd2_big_rat", "bd2_big_rat",
+    "bd2_stray_dog", "bd2_stray_dog",
+    "bd2_loose_change", "bd2_loose_change",
+    "bd2_dumpster_fire", "bd2_dumpster_fire",
+    "bd2_morning_breath", "bd2_morning_breath",
+    "bd2_shelter",
+    "bd2_new_shoes",
+    "bd2_plague",
+    "bd2_lady_luck"
+  ]
+}

@@ -35,6 +35,41 @@
     "frameCount": 20
   },
   {
+    "name": "base_deck_2/lady_luck",
+    "file": "base_deck_2_lady_luck.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 25
+  },
+  {
+    "name": "base_deck_2/ladylucksneakerfusion",
+    "file": "base_deck_2_ladylucksneakerfusion.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 29
+  },
+  {
+    "name": "base_deck_2/new shoes",
+    "file": "base_deck_2_new shoes.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 25
+  },
+  {
+    "name": "base_deck_2/plague",
+    "file": "base_deck_2_plague.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 25
+  },
+  {
+    "name": "base_deck_2/shelter",
+    "file": "base_deck_2_shelter.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 25
+  },
+  {
     "name": "ice_wolf",
     "file": "ice_wolf.png",
     "frameWidth": 88,
