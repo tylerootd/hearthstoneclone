@@ -11,6 +11,7 @@ import {
   ARTIFACT_DEFS, ALL_ARTIFACT_IDS
 } from '../game/battleEngine.js';
 
+const base = import.meta.env.BASE_URL || './';
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
 const BAR_H = 18;
@@ -74,6 +75,11 @@ export default class BattleScene extends Phaser.Scene {
 
     this._createHelpPanel();
     this.events.on('shutdown', () => this._destroyHelpPanel());
+
+    if (!this.cache.video.exists('win_anim')) {
+      this.load.video('win_anim', base + 'Videos/Winning animation mmo pvp.mp4');
+      this.load.start();
+    }
 
     this.refresh();
     this._banner('YOUR TURN');
@@ -1636,7 +1642,7 @@ export default class BattleScene extends Phaser.Scene {
       ws: this.battleData.ws, myId: this.battleData.myId
     };
 
-    if (won) {
+    if (won && this.cache.video.exists('win_anim')) {
       try {
         const video = this.add.video(W / 2, 380, 'win_anim');
         video.setDisplaySize(460, 340).setMute(true).setDepth(401);

@@ -331,7 +331,8 @@ function viewFor(state, who) {
   const view = {
     you: { hp: me.hp, maxHp: me.maxHp, mana: me.mana, maxMana: me.maxMana, hand: cleanHand(me.hand), board: cleanBoard(me.board), deckCount: me.deck.length },
     opponent: { hp: opp.hp, maxHp: opp.maxHp, mana: opp.mana, maxMana: opp.maxMana, handCount: opp.hand.length, board: cleanBoard(opp.board), deckCount: opp.deck.length },
-    yourTurn: state.currentTurn === who, turn: state.turn, phase: state.phase, winner, log: state.log.slice(-5)
+    yourTurn: state.currentTurn === who, turn: state.turn, phase: state.phase, winner, log: state.log.slice(-5),
+    freeCards: state.freeCardsThisTurn === who
   };
   if (state.lastSkippedTurn === who) view.skippedYourTurn = true;
   if (state.gainedExtraTurn === who) view.gainedExtraTurn = true;

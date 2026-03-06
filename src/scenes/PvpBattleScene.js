@@ -6,6 +6,7 @@ import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from
 import { rebuildPool, getCardById } from '../data/cardPool.js';
 import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian, hasLadyLuckOnBoard, isNewShoesWithEquipOption } from '../game/battleEngine.js';
 
+const base = import.meta.env.BASE_URL || './';
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
 const BAR_H = 18;
@@ -101,6 +102,11 @@ export default class PvpBattleScene extends Phaser.Scene {
 
     if (this.ws.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'pvp_ready' }));
+
+    if (!this.cache.video.exists('win_anim')) {
+      this.load.video('win_anim', base + 'Videos/Winning animation mmo pvp.mp4');
+      this.load.start();
+    }
   }
 
   _ui(o) { this.uiGroup.add(o); return o; }
@@ -782,7 +788,8 @@ export default class PvpBattleScene extends Phaser.Scene {
       const ang = off * fan;
       const arc = Math.abs(off) * 3.5;
       const cy = HAND_Y + arc;
-      const ok = card.cost <= s.you.mana && s.yourTurn && s.phase === 'playing';
+      const effectiveCost = s.freeCards ? 0 : card.cost;
+      const ok = effectiveCost <= s.you.mana && s.yourTurn && s.phase === 'playing';
       let handArtMask = null;
 
       const ct = this.add.container(cx, cy).setDepth(30 + i).setAngle(ang);
@@ -1582,13 +1589,15 @@ export default class PvpBattleScene extends Phaser.Scene {
 
   _showWin() {
     grantXp(30);
-    try {
-      const video = this.add.video(W / 2, 400, 'win_anim');
-      video.setDisplaySize(460, 340).setDepth(101).setMute(true);
-      if (this.game.renderer.type === Phaser.WEBGL)
-        video.setPostPipeline('ChromaKeyPostFX');
-      video.play(true);
-    } catch (_) {}
+    if (this.cache.video.exists('win_anim')) {
+      try {
+        const video = this.add.video(W / 2, 400, 'win_anim');
+        video.setDisplaySize(460, 340).setDepth(101).setMute(true);
+        if (this.game.renderer.type === Phaser.WEBGL)
+          video.setPostPipeline('ChromaKeyPostFX');
+        video.play(true);
+      } catch (_) {}
+    }
 
     const title = this.add.text(W / 2, 80, 'VICTORY', {
       ...FONT, fontSize: '44px', color: '#e6b422', stroke: '#000', strokeThickness: 6

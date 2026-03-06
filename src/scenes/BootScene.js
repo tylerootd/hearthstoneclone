@@ -4,13 +4,18 @@ import { loadCollection, saveCollection, loadDeck, saveDeck, loadGold, saveGold,
 import { setBattleCardPoolRef } from '../game/battleEngine.js';
 import ChromaKeyPostFX from '../pipelines/ChromaKeyPostFX.js';
 
+const base = import.meta.env.BASE_URL || './';
+
 export default class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
 
   async create() {
     const loadTxt = this.add.text(512, 350, 'Loading...', { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5);
 
-    await initCardPool();
+    const [, manifestData] = await Promise.all([
+      initCardPool(),
+      fetch(base + 'sprites/sheets/manifest.json').then(r => r.ok ? r.json() : []).catch(() => [])
+    ]);
     setBattleCardPoolRef(getAllCards);
 
     if (!loadCollection()) saveCollection(getStarterCollection());
@@ -39,22 +44,14 @@ export default class BootScene extends Phaser.Scene {
 
     this.load.image('dragons_den_building', './dragons_den.png');
     this.load.image('battle_board', './battle_board.png');
-    // card_frame disabled for now
-    this.load.video('win_anim', './Videos/Winning animation mmo pvp.mp4');
 
-    try {
-      const mRes = await fetch('./sprites/sheets/manifest.json');
-      const sheets = await mRes.json();
-      sheets.forEach(s => {
-        const key = 'sheet_' + s.name;
-        this.load.spritesheet(key, `./sprites/sheets/${s.file}`, {
-          frameWidth: s.frameWidth, frameHeight: s.frameHeight
-        });
+    (manifestData || []).forEach(s => {
+      const key = 'sheet_' + s.name;
+      this.load.spritesheet(key, `./sprites/sheets/${s.file}`, {
+        frameWidth: s.frameWidth, frameHeight: s.frameHeight
       });
-      this._sheetManifest = sheets;
-    } catch (e) {
-      this._sheetManifest = [];
-    }
+    });
+    this._sheetManifest = manifestData || [];
 
     if (this.game.renderer.type === Phaser.WEBGL) {
       this.game.renderer.pipelines.addPostPipeline('ChromaKeyPostFX', ChromaKeyPostFX);
