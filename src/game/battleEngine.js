@@ -146,7 +146,13 @@ export function startTurn(state, who) {
   state.turn++;
 
   if (side.maxMana < MAX_MANA) side.maxMana++;
-  side.mana = side.maxMana;
+  if (state.manaLockNextTurn && state.manaLockNextTurn[who]) {
+    side.mana = 0;
+    delete state.manaLockNextTurn[who];
+    state.log.push(`  ${who} cannot spend mana this turn!`);
+  } else {
+    side.mana = side.maxMana;
+  }
 
   side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
 
@@ -286,6 +292,44 @@ function applyEffect(state, who, effect, targetInfo, sourceMinion) {
           state.log.push(`  Buffs ${m.name} +${atk}/+${hp}`);
         }
       }
+      break;
+    }
+    case 'buffAllFriendly': {
+      const { atk, hp } = effect.value;
+      side.board.forEach(m => {
+        m.atk += atk;
+        m.hp += hp;
+        m.maxHp += hp;
+      });
+      if (side.board.length) state.log.push(`  All friendly minions +${atk}/+${hp}`);
+      break;
+    }
+    case 'dealDamageAllEnemies': {
+      const val = effect.value;
+      opp.board.forEach(m => { m.hp -= val; });
+      opp.hp -= val;
+      state.log.push(`  Deals ${val} to all enemies`);
+      cleanDead(state);
+      break;
+    }
+    case 'summon': {
+      const ids = effect.value;
+      for (const cid of ids) {
+        const card = getCardById(cid);
+        if (!card || card.type !== 'minion') continue;
+        if (side.board.length >= MAX_BOARD) break;
+        const minion = makeMinion(card);
+        minion.slot = nextFreeSlot(side.board);
+        minion.canAttack = (minion.keywords || []).includes('rage');
+        side.board.push(minion);
+        state.log.push(`  Summons ${minion.name}`);
+      }
+      break;
+    }
+    case 'manaLock': {
+      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
+      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      state.log.push(`  Opponent cannot spend mana next turn!`);
       break;
     }
   }

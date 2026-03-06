@@ -40,7 +40,13 @@ function startTurn(state, who) {
   state.currentTurn = who;
   state.turn++;
   if (side.maxMana < MAX_MANA) side.maxMana++;
-  side.mana = side.maxMana;
+  if (state.manaLockNextTurn && state.manaLockNextTurn[who]) {
+    side.mana = 0;
+    delete state.manaLockNextTurn[who];
+    state.log.push(`${who} cannot spend mana this turn!`);
+  } else {
+    side.mana = side.maxMana;
+  }
   side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
   drawCard(state, who);
   processTriggers(state, who, 'turn_start');
@@ -115,6 +121,37 @@ function applyEffect(state, who, effect, targetInfo, src) {
       if (effect.target === 'friendly_minion' && targetInfo?.type === 'minion') { const m = side.board.find(m => m.uid === targetInfo.uid); if (m) { m.atk += atk; m.hp += hp; m.maxHp += hp; } }
       break;
     }
+    case 'buffAllFriendly': {
+      const { atk, hp } = effect.value;
+      side.board.forEach(m => { m.atk += atk; m.hp += hp; m.maxHp += hp; });
+      break;
+    }
+    case 'dealDamageAllEnemies': {
+      const v = effect.value;
+      opp.board.forEach(m => { m.hp -= v; });
+      opp.hp -= v;
+      cleanDead(state);
+      break;
+    }
+    case 'summon': {
+      const ids = effect.value;
+      const cardById = state.cardById || {};
+      for (const cid of ids) {
+        const card = cardById[cid];
+        if (!card || card.type !== 'minion') continue;
+        if (side.board.length >= MAX_BOARD) break;
+        const minion = makeMinion(card);
+        minion.slot = nextFreeSlot(side.board);
+        minion.canAttack = (minion.keywords || []).includes('rage');
+        side.board.push(minion);
+      }
+      break;
+    }
+    case 'manaLock': {
+      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
+      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      break;
+    }
   }
 }
 
@@ -142,10 +179,14 @@ function checkWin(state) {
 }
 
 function createPvpState(p1Cards, p2Cards, p1Arts, p2Arts) {
+  const allCards = [...p1Cards, ...p2Cards];
+  const cardById = {};
+  allCards.forEach(c => { if (c && c.id) cardById[c.id] = c; });
   const state = {
-    player: { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle(p1Cards), hand: [], board: [], fatigue: 0, artifacts: p1Arts || [] },
-    enemy:  { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle(p2Cards), hand: [], board: [], fatigue: 0, artifacts: p2Arts || [] },
+    player: { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle([...p1Cards].map(c => ({ ...c }))), hand: [], board: [], fatigue: 0, artifacts: p1Arts || [] },
+    enemy:  { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle([...p2Cards].map(c => ({ ...c }))), hand: [], board: [], fatigue: 0, artifacts: p2Arts || [] },
     origDecks: { player: [...p1Cards], enemy: [...p2Cards] },
+    cardById,
     turn: 0, currentTurn: 'player', phase: 'playing', winner: null, log: []
   };
   /* ARTIFACTS DISABLED

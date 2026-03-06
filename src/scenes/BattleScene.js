@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts, saveArtifacts } from '../data/storage.js';
 import { getCardById } from '../data/cardPool.js';
+import { buildHelpItemsForCard, getPlaceholderHelpItems } from '../utils/helpText.js';
 import { grantXp, loadProgression } from '../data/progression.js';
 import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
 import {
@@ -42,7 +43,6 @@ export default class BattleScene extends Phaser.Scene {
     this._logOpen = false;
     this._nameMasks = [];
     this._helpTool = null;
-    this._helpToolPanelMode = false;
     this._helpPanel = null;
     this._helpPanelMinimized = false;
 
@@ -68,42 +68,11 @@ export default class BattleScene extends Phaser.Scene {
     this.input.on('pointerup', (p) => this._onUp(p));
     this.input.keyboard.on('keydown-ESC', () => this._cancel());
 
-    this._initHelpToggle();
-
+    this._createHelpPanel();
     this.events.on('shutdown', () => this._destroyHelpPanel());
 
     this.refresh();
     this._banner('YOUR TURN');
-  }
-
-  _initHelpToggle() {
-    const bx = 52, by = 14;
-    const bg = this.add.rectangle(bx, by, 90, 20, 0x1a1a2e, 0.85)
-      .setStrokeStyle(1, 0x555566).setDepth(200).setInteractive({ useHandCursor: true });
-    const txt = this.add.text(bx, by, '\u{1F4CC} TOOLTIP', {
-      fontFamily: 'Arial, sans-serif', fontSize: '9px', color: '#aaaacc'
-    }).setOrigin(0.5).setDepth(201);
-    this._helpToggleBg = bg;
-    this._helpToggleTxt = txt;
-    bg.on('pointerdown', () => {
-      this._helpToolPanelMode = !this._helpToolPanelMode;
-      this._clearHelpToolForce();
-      if (!this._helpToolPanelMode) this._destroyHelpPanel();
-      this._updateHelpToggleVisual();
-    });
-    this._updateHelpToggleVisual();
-  }
-
-  _updateHelpToggleVisual() {
-    if (this._helpToolPanelMode) {
-      this._helpToggleBg.setStrokeStyle(2, 0xddaa22);
-      this._helpToggleTxt.setText('\u{1F4CC} PANEL');
-      this._helpToggleTxt.setColor('#ffe066');
-    } else {
-      this._helpToggleBg.setStrokeStyle(1, 0x555566);
-      this._helpToggleTxt.setText('\u{1F4CC} TOOLTIP');
-      this._helpToggleTxt.setColor('#aaaacc');
-    }
   }
 
   _ui(o) { this.uiGroup.add(o); return o; }
@@ -148,8 +117,9 @@ export default class BattleScene extends Phaser.Scene {
 
   _showHelpTool(items) {
     if (!Array.isArray(items)) items = [items];
-    if (this._helpToolPanelMode) { this._updateHelpPanel(items); return; }
-    this._clearHelpTool();
+    this._updateHelpPanel(items);
+    this._destroyHelpToolEls();
+    if (items.length === 0) return;
     const centerY = 278;
     const els = [];
     const htTweens = [];
@@ -238,12 +208,8 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   _clearHelpTool() {
-    if (this._helpToolPanelMode) return;
     this._destroyHelpToolEls();
-  }
-
-  _clearHelpToolForce() {
-    this._destroyHelpToolEls();
+    this._updateHelpPanel(getPlaceholderHelpItems());
   }
 
   _destroyHelpToolEls() {
@@ -263,10 +229,11 @@ export default class BattleScene extends Phaser.Scene {
     panel.id = 'help-panel';
     Object.assign(panel.style, {
       position: 'absolute',
-      left: (rect.left + rect.width - 290) + 'px',
-      top: (rect.top + 40) + 'px',
+      left: (rect.left + 12) + 'px',
+      top: (rect.top + rect.height - 332) + 'px',
       width: '280px',
       minWidth: '160px',
+      maxHeight: '320px',
       minHeight: '32px',
       resize: 'both',
       overflow: 'hidden',
@@ -293,7 +260,7 @@ export default class BattleScene extends Phaser.Scene {
       flexShrink: '0',
     });
     const titleTxt = document.createElement('span');
-    titleTxt.textContent = 'KEYWORDS';
+    titleTxt.textContent = 'KEYWORDS & EFFECTS';
     titleTxt.style.fontSize = '8px';
     titleTxt.style.letterSpacing = '1px';
     const minBtn = document.createElement('span');
@@ -309,9 +276,12 @@ export default class BattleScene extends Phaser.Scene {
     const body = document.createElement('div');
     body.className = 'hp-body';
     Object.assign(body.style, {
-      padding: '4px 0',
+      padding: '4px 8px',
       overflow: 'auto',
+      overflowX: 'hidden',
       flex: '1',
+      maxHeight: '260px',
+      wordWrap: 'break-word',
     });
     panel.appendChild(body);
     document.body.appendChild(panel);
@@ -345,6 +315,7 @@ export default class BattleScene extends Phaser.Scene {
     });
 
     this._helpPanel = { el: panel, body, onMouseMove, onMouseUp };
+    this._updateHelpPanel(getPlaceholderHelpItems());
   }
 
   _updateHelpPanel(items) {
@@ -655,8 +626,10 @@ export default class BattleScene extends Phaser.Scene {
         fr.on('pointerover', () => {
           showBoardGlow(0x44ff44);
           if (!this.targetMode) {
-            const tips = [{ msg: 'Unit can attack', icon: 'sword' }];
-            if (isGuardian) tips.push({ msg: 'Units with Guardian block all incoming attacks', icon: 'guardian' });
+            const card = getCardById(m.id);
+            let tips = buildHelpItemsForCard(card);
+            if (tips.length === 0) tips = [{ msg: 'Unit can attack', icon: 'sword' }];
+            else tips = [{ msg: 'Unit can attack', icon: 'sword' }, ...tips];
             this._showHelpTool(tips);
           }
           if (this.targetMode && this.selecting?.type === 'attack' && this.selecting.uid !== m.uid) {
@@ -672,17 +645,19 @@ export default class BattleScene extends Phaser.Scene {
         });
       } else if (!m.canAttack && isPlayer && !this.targetMode) {
         fr.on('pointerover', () => {
-          const tips = [];
-          const msg = m.attackedThisTurn
-            ? 'Unit has already attacked this turn'
-            : 'Unit cannot attack on the same turn it is played';
-          tips.push({ msg, icon: 'zzz' });
-          if (isGuardian) tips.push({ msg: 'Units with Guardian block all incoming attacks', icon: 'guardian' });
+          const card = getCardById(m.id);
+          let tips = buildHelpItemsForCard(card);
+          const msg = m.attackedThisTurn ? 'Unit has already attacked this turn' : 'Unit cannot attack on the same turn it is played';
+          tips = [{ msg, icon: 'zzz' }, ...tips];
           this._showHelpTool(tips);
         });
         fr.on('pointerout', () => this._clearHelpTool());
       } else if (!isPlayer && !this.targetMode && isGuardian) {
-        fr.on('pointerover', () => this._showHelpTool([{ msg: 'Units with Guardian block all incoming attacks', icon: 'guardian' }]));
+        fr.on('pointerover', () => {
+          const card = getCardById(m.id);
+          const tips = buildHelpItemsForCard(card);
+          this._showHelpTool(tips.length ? tips : [{ msg: 'Units with Guardian block all incoming attacks', icon: 'guardian' }]);
+        });
         fr.on('pointerout', () => this._clearHelpTool());
       }
       if (this.targetMode && !isPlayer) {
@@ -905,12 +880,15 @@ export default class BattleScene extends Phaser.Scene {
     if (s.idleGfx) s.idleGfx.setVisible(false);
     if (s.hoverGfx) s.hoverGfx.setVisible(true);
     this._startHandScroll(idx);
+    const tips = buildHelpItemsForCard(s.card);
+    this._showHelpTool(tips.length ? tips : getPlaceholderHelpItems());
   }
 
   _unhoverSlot(idx) {
     const s = this._handSlots[idx];
     if (!s?.ct?.active) return;
     this._stopHandScroll(idx);
+    this._clearHelpTool();
     s.ct.setDepth(30 + idx);
     s.ct.y = s.cy;
     s.ct.scaleX = 1;

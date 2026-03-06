@@ -1,0 +1,18 @@
+{
+  "id": "base_deck_1",
+  "name": "Base Deck 1",
+  "cards": [
+    "bd1_potato", "bd1_potato",
+    "bd1_chicken", "bd1_chicken",
+    "bd1_sheep", "bd1_sheep",
+    "bd1_guard_dog", "bd1_guard_dog",
+    "bd1_scarecrow", "bd1_scarecrow",
+    "bd1_ox", "bd1_ox",
+    "bd1_harvest_season", "bd1_harvest_season",
+    "bd1_farmers_pitchfork", "bd1_farmers_pitchfork",
+    "bd1_old_macdonald",
+    "bd1_world_tree_apple",
+    "bd1_big_green_tractor",
+    "bd1_drought"
+  ]
+}

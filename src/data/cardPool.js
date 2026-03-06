@@ -4,16 +4,22 @@ let baseCards = [];
 let merged = [];
 let spriteList = [];
 let npcList = [];
+let baseDeck1Cards = null;
 
 export async function initCardPool() {
-  const [cardsRes, spritesRes, npcsRes] = await Promise.all([
+  const [cardsRes, spritesRes, npcsRes, deckRes] = await Promise.all([
     fetch('./data/cards.json'),
     fetch('./data/sprites.json'),
-    fetch('./data/npcs.json')
+    fetch('./data/npcs.json'),
+    fetch('./assets/Base%20deck%201/deck.json').catch(() => null)
   ]);
   baseCards = await cardsRes.json();
   spriteList = await spritesRes.json();
   npcList = await npcsRes.json();
+  const deck1 = deckRes && deckRes.ok ? await deckRes.json() : null;
+  if (deck1 && deck1.cards && deck1.cards.length) {
+    baseDeck1Cards = deck1.cards;
+  }
   rebuildPool();
 }
 
@@ -38,22 +44,13 @@ export function getStarterCollection() {
 }
 
 export function getStarterDeck() {
-  const picks = [
-    'base_murloc', 'base_murloc',
-    'base_goldshire', 'base_goldshire',
-    'base_raptor', 'base_raptor',
-    'base_croc', 'base_croc',
-    'base_frostwolf', 'base_frostwolf',
-    'base_shattered', 'base_shattered',
-    'base_arcane_int', 'base_arcane_int',
-    'base_yeti', 'base_yeti',
-    'base_shieldmasta', 'base_shieldmasta',
-    'base_fireball', 'base_fireball',
-    'base_gnomish', 'base_gnomish',
-    'base_boulderfist', 'base_boulderfist',
-    'base_nightblade', 'base_nightblade',
-    'base_war_golem', 'base_war_golem',
-    'base_ironbark', 'base_ironbark'
+  if (baseDeck1Cards && baseDeck1Cards.length) {
+    return [...baseDeck1Cards];
+  }
+  return [
+    'bd1_potato', 'bd1_potato', 'bd1_chicken', 'bd1_chicken', 'bd1_sheep', 'bd1_sheep',
+    'bd1_guard_dog', 'bd1_guard_dog', 'bd1_scarecrow', 'bd1_scarecrow', 'bd1_ox', 'bd1_ox',
+    'bd1_harvest_season', 'bd1_harvest_season', 'bd1_farmers_pitchfork', 'bd1_farmers_pitchfork',
+    'bd1_old_macdonald', 'bd1_world_tree_apple', 'bd1_big_green_tractor', 'bd1_drought'
   ];
-  return picks;
 }
