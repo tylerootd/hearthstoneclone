@@ -5,5 +5,12 @@
     "frameWidth": 88,
     "frameHeight": 124,
     "frameCount": 27
+  },
+  {
+    "name": "stone_golem",
+    "file": "stone_golem.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 27
   }
 ]
