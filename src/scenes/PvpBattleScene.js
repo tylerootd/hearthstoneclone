@@ -422,7 +422,6 @@ export default class PvpBattleScene extends Phaser.Scene {
   redraw() {
     this._clearHelpTool();
     this._hideDmgPreview();
-    this._clearGifs();
     this._nameMasks.forEach(m => m.destroy());
     this._nameMasks = [];
     this.uiGroup.clear(true, true);
