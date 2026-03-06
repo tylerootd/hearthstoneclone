@@ -98,7 +98,6 @@ export default class DeckBuilderScene extends Phaser.Scene {
       }).setOrigin(0.5));
 
       bg.on('pointerdown', () => {
-        if (this.deckIds.length >= 30) return;
         this.deckIds.push(id);
         this.redraw();
       });
@@ -128,7 +127,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
   drawDeckPanel() {
     this.uiGroup.add(this.add.rectangle(870, H / 2, 280, H - 10, 0x111122));
     this.uiGroup.add(this.add.rectangle(870, H / 2, 280, H - 10, 0x000000, 0).setStrokeStyle(1, 0x334455));
-    this.uiGroup.add(this.add.text(870, 16, `DECK  ${this.deckIds.length}/30`, {
+    this.uiGroup.add(this.add.text(870, 16, `DECK  ${this.deckIds.length}`, {
       ...FONT, fontSize: '14px', color: '#e6b422'
     }).setOrigin(0.5));
 
@@ -182,7 +181,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
 
   drawBottomBar() {
     const barY = H - 40;
-    const canSave = this.deckIds.length === 30;
+    const canSave = this.deckIds.length >= 1;
 
     const buttons = [
       { label: 'CLEAR', x: 740, w: 80, color: 0x442222, border: 0xaa4444, active: this.deckIds.length > 0, fn: () => { this.deckIds = []; this.redraw(); } },
@@ -261,7 +260,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
 
     // save current deck as new slot
     const saveY = H / 2 + panelH / 2 - 60;
-    const canSaveSlot = this.deckIds.length === 30;
+    const canSaveSlot = this.deckIds.length >= 1;
 
     const saveSlotBg = this.add.rectangle(W / 2, saveY, 280, 36, canSaveSlot ? 0x223344 : 0x1a1a1a).setInteractive({ useHandCursor: true });
     saveSlotBg.setStrokeStyle(1, canSaveSlot ? 0x4488aa : 0x333333);

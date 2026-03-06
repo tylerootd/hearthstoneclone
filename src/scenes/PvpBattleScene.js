@@ -8,8 +8,9 @@ import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian } from '../game/bat
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
-const CARD_ART_ZOOM = 1.4;
 const BAR_H = 18;
+const ART_ZONE_TOP = -CARD_H / 2 + BAR_H;
+const ART_ZONE_HEIGHT = CARD_H - 2 * BAR_H;
 const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
 const STAT_FONT = { fontFamily: 'Arial Black, Impact, sans-serif', fontStyle: 'bold' };
@@ -20,6 +21,7 @@ const PLAY_LINE = 550;
 const HIT_PAD = 18;
 const SLOT_COUNT = 7;
 const SLOT_X = (s) => W / 2 + (s - 3) * BOARD_GAP;
+const HELP_TOOL_WIDTH = 5 * CARD_W + 4 * 6;
 
 export default class PvpBattleScene extends Phaser.Scene {
   constructor() { super('PvpBattle'); }
@@ -48,6 +50,7 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._opponentHover = null;
     this._opponentHoverGfx = null;
     this._lastSentHover = undefined;
+    this._handArtMasks = [];
 
     this.add.image(W / 2, H / 2, 'battle_board').setDisplaySize(W, H).setDepth(0);
     this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.32).setDepth(1)
@@ -99,12 +102,29 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   _ui(o) { this.uiGroup.add(o); return o; }
-  _clearHand() { this.handCards.forEach(c => c.destroy()); this.handCards = []; }
+  _clearHand() {
+    this._handArtMasks.forEach(m => m.destroy());
+    this._handArtMasks = [];
+    this.handCards.forEach(c => c.destroy());
+    this.handCards = [];
+  }
 
   _cancel() {
     if (this._dragCard) {
       const d = this._dragCard;
-      this.tweens.add({ targets: d.ct, x: d.ox, y: d.oy, angle: d.oa, scaleX: 1, scaleY: 1, duration: 100 });
+      this.tweens.add({
+        targets: d.ct,
+        x: d.ox,
+        y: d.oy,
+        angle: d.oa,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 100,
+        onUpdate: () => {
+          const slot = this._handSlots[d.idx];
+          if (slot) this._syncHandArtMask(slot);
+        }
+      });
       d.ct.setDepth(30 + d.idx);
       this._dragCard = null;
     }
@@ -156,16 +176,18 @@ export default class PvpBattleScene extends Phaser.Scene {
       sword:    { fill: 0x3d2800, stroke: 0xddaa22, label: '\u2694',     font: { fontSize: '10px', fontStyle: 'bold' } },
       zzz:      { fill: 0x222233, stroke: 0x555566, label: 'zzz',        font: { ...FONT, fontSize: '5px', color: '#888' } },
       guardian: { fill: 0x0a2a3d, stroke: 0x33ddff, label: '\u{1F6E1}',  font: { fontSize: '10px' } },
+      spell:    { fill: 0x3d2035, stroke: 0xff77aa, label: '\u2726',     font: { fontSize: '10px', color: '#ffaacc' } },
+      battlecry: { fill: 0x3d2000, stroke: 0xff6600, label: '\u{1F4A5}', font: { fontSize: '10px', color: '#ffaa44' } },
     };
     const txtStyle = { ...FONT, fontSize: '7px', color: '#ffe066', stroke: '#002222', strokeThickness: 1 };
 
     const vertical = items.length <= 2;
     const cols = vertical ? 1 : 2;
     const rows = vertical ? 2 : 2;
-    const barW = vertical ? 370 : 185;
+    const gridW = HELP_TOOL_WIDTH;
+    const barW = (gridW - (cols - 1) * gap) / cols;
     const nameOff = iconSize + 4;
     const textAreaW = barW - nameOff - 4;
-    const gridW = cols * barW + (cols - 1) * gap;
     const gridH = rows * tipBarH + (rows - 1) * gap;
     const gridLeft = W / 2 - gridW / 2;
     const gridTop = centerY - gridH / 2;
@@ -199,7 +221,8 @@ export default class PvpBattleScene extends Phaser.Scene {
       }
 
       const textLeft = bx - barW / 2 + nameOff + 2;
-      const t1 = this.add.text(textLeft, by, it.msg, txtStyle).setOrigin(0, 0.5).setDepth(52);
+      const msgStyle = it.icon === 'spell' ? { ...txtStyle, color: '#ffaacc' } : it.icon === 'battlecry' ? { ...txtStyle, color: '#ffaa44' } : txtStyle;
+      const t1 = this.add.text(textLeft, by, it.msg, msgStyle).setOrigin(0, 0.5).setDepth(52);
       els.push(t1);
 
       if (t1.width > textAreaW) {
@@ -209,7 +232,7 @@ export default class PvpBattleScene extends Phaser.Scene {
         masks.push(maskGfx);
         t1.setMask(geoMask);
 
-        const t2 = this.add.text(textLeft + t1.width + 40, by, it.msg, txtStyle)
+        const t2 = this.add.text(textLeft + t1.width + 40, by, it.msg, msgStyle)
           .setOrigin(0, 0.5).setDepth(52).setMask(geoMask);
         els.push(t2);
 
@@ -254,11 +277,11 @@ export default class PvpBattleScene extends Phaser.Scene {
     Object.assign(panel.style, {
       position: 'absolute',
       left: (rect.left + 12) + 'px',
-      top: (rect.top + rect.height - 332) + 'px',
+      top: (rect.top + rect.height - 400) + 'px',
       width: '280px',
       minWidth: '160px',
-      maxHeight: '320px',
-      minHeight: '32px',
+      maxHeight: '520px',
+      minHeight: '64px',
       resize: 'both',
       overflow: 'hidden',
       background: 'rgba(26,26,46,0.95)',
@@ -301,10 +324,10 @@ export default class PvpBattleScene extends Phaser.Scene {
     body.className = 'hp-body';
     Object.assign(body.style, {
       padding: '4px 8px',
-      overflow: 'auto',
+      overflowY: 'auto',
       overflowX: 'hidden',
       flex: '1',
-      maxHeight: '260px',
+      minHeight: '0',
       wordWrap: 'break-word',
     });
     panel.appendChild(body);
@@ -348,9 +371,11 @@ export default class PvpBattleScene extends Phaser.Scene {
     body.innerHTML = '';
 
     const iconDefs = {
-      sword:    { bg: '#3d2800', border: '#ddaa22', label: '\u2694' },
-      zzz:      { bg: '#222233', border: '#555566', label: 'zzz' },
-      guardian: { bg: '#0a2a3d', border: '#33ddff', label: '\u{1F6E1}' },
+      sword:    { bg: '#3d2800', border: '#ddaa22', label: '\u2694', color: '#ffe066' },
+      zzz:      { bg: '#222233', border: '#555566', label: 'zzz', color: '#ffe066' },
+      guardian: { bg: '#0a2a3d', border: '#33ddff', label: '\u{1F6E1}', color: '#ffe066' },
+      spell:    { bg: '#3d2035', border: '#ff77aa', label: '\u2726', color: '#ffaacc' },
+      battlecry: { bg: '#3d2000', border: '#ff6600', label: '\u{1F4A5}', color: '#ffaa44' },
     };
 
     items.forEach(it => {
@@ -376,7 +401,7 @@ export default class PvpBattleScene extends Phaser.Scene {
       text.textContent = it.msg;
       Object.assign(text.style, {
         fontSize: '0.65em',
-        color: '#ffe066',
+        color: (def && def.color) ? def.color : '#ffe066',
         lineHeight: '1.4',
       });
 
@@ -516,15 +541,17 @@ export default class PvpBattleScene extends Phaser.Scene {
 
 
       const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
+      const artZoneY = y + ART_ZONE_TOP;
       const animKey = card ? getCardAnimKey(this, card) : null;
       if (animKey) {
-        const spr = this.add.sprite(x, y, animKey).setDisplaySize(CARD_W, CARD_H).setDepth(10.5);
+        const spr = this.add.sprite(x, artZoneY + ART_ZONE_HEIGHT / 2, animKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT).setDepth(10.5);
         spr.play(animKey);
         this._ui(spr);
       } else if (texKey) {
-        const img = this.add.image(x, y, texKey).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM).setDepth(10.5);
+        this._ui(this.add.rectangle(x, artZoneY + ART_ZONE_HEIGHT / 2, CARD_W, ART_ZONE_HEIGHT, 0xffffff, 1).setDepth(10.45));
+        const img = this.add.image(x, artZoneY + ART_ZONE_HEIGHT / 2, texKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT).setDepth(10.5);
         const maskGfx = this.make.graphics();
-        maskGfx.fillRect(x - CARD_W / 2, y - CARD_H / 2, CARD_W, CARD_H);
+        maskGfx.fillRect(x - CARD_W / 2, artZoneY, CARD_W, ART_ZONE_HEIGHT);
         img.setMask(maskGfx.createGeometryMask());
         this._nameMasks.push(maskGfx);
         this._ui(img);
@@ -730,6 +757,7 @@ export default class PvpBattleScene extends Phaser.Scene {
       const arc = Math.abs(off) * 3.5;
       const cy = HAND_Y + arc;
       const ok = card.cost <= s.you.mana && s.yourTurn && s.phase === 'playing';
+      let handArtMask = null;
 
       const ct = this.add.container(cx, cy).setDepth(30 + i).setAngle(ang);
 
@@ -738,17 +766,19 @@ export default class PvpBattleScene extends Phaser.Scene {
 
       const handAnimKey = getCardAnimKey(this, card);
       if (handAnimKey) {
-        const spr = this.add.sprite(0, 0, handAnimKey).setDisplaySize(CARD_W, CARD_H);
+        const spr = this.add.sprite(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, handAnimKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT);
         spr.play(handAnimKey);
         ct.add(spr);
       } else {
         const artKey = getCardTextureKey(this, card);
         if (artKey) {
-          const img = this.add.image(0, 0, artKey).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM);
+          ct.add(this.add.rectangle(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, CARD_W, ART_ZONE_HEIGHT, 0xffffff, 1));
           const maskGfx = this.make.graphics();
-          maskGfx.fillRect(cx - CARD_W / 2, cy - CARD_H / 2, CARD_W, CARD_H);
+          maskGfx.fillRect(-CARD_W / 2, ART_ZONE_TOP, CARD_W, ART_ZONE_HEIGHT);
+          maskGfx.setVisible(false);
+          ct.add(maskGfx);
+          const img = this.add.image(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, artKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT);
           img.setMask(maskGfx.createGeometryMask());
-          this._nameMasks.push(maskGfx);
           ct.add(img);
         }
       }
@@ -790,8 +820,13 @@ export default class PvpBattleScene extends Phaser.Scene {
           ...STAT_FONT, fontSize: '10px', color: '#fff', stroke: '#000', strokeThickness: 3
         }).setOrigin(0.5));
       } else {
-        ct.add(this.add.text(0, CARD_H / 2 - 13, 'SPELL', {
-          ...FONT, fontSize: '7px', color: '#bb77ee'
+        const handSpellY = -CARD_H / 2 + BAR_H / 2;
+        ct.add(this.add.rectangle(0, handSpellY, CARD_W, BAR_H, 0x3d2035, 0.95)
+          .setStrokeStyle(1, 0xff77aa));
+        ct.add(this.add.text(-CARD_W / 2 + 10, handSpellY, '\u2726', { fontSize: '12px', color: '#ffaacc' }).setOrigin(0.5));
+        ct.add(this.add.text(CARD_W / 2 - 10, handSpellY, '\u2726', { fontSize: '12px', color: '#ffaacc' }).setOrigin(0.5));
+        ct.add(this.add.text(0, handSpellY, 'SPELL', {
+          ...STAT_FONT, fontSize: '11px', color: '#ffaacc', stroke: '#000', strokeThickness: 3
         }).setOrigin(0.5));
       }
 
@@ -817,7 +852,7 @@ export default class PvpBattleScene extends Phaser.Scene {
       hoverGfx.setVisible(false);
       ct.add(hoverGfx);
 
-      this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i, needsScroll, nt1, nt2, hoverTween, barCY, nStyle, hoverGfx, idleGfx });
+      this._handSlots.push({ ct, cx, cy, ang, ok, card, idx: i, needsScroll, nt1, nt2, hoverTween, barCY, nStyle, hoverGfx, idleGfx, handArtMask });
       this.handCards.push(ct);
     });
   }
@@ -863,6 +898,7 @@ export default class PvpBattleScene extends Phaser.Scene {
     s.ct.angle = 0;
     if (s.idleGfx) s.idleGfx.setVisible(false);
     if (s.hoverGfx) s.hoverGfx.setVisible(true);
+    this._syncHandArtMask(s);
     this._startHandScroll(idx);
     const tips = buildHelpItemsForCard(s.card);
     this._showHelpTool(tips.length ? tips : getPlaceholderHelpItems());
@@ -880,6 +916,15 @@ export default class PvpBattleScene extends Phaser.Scene {
     s.ct.angle = s.ang;
     if (s.hoverGfx) s.hoverGfx.setVisible(false);
     if (s.idleGfx) s.idleGfx.setVisible(true);
+    this._syncHandArtMask(s);
+  }
+
+  _syncHandArtMask(s) {
+    if (!s?.handArtMask?.active) return;
+    const ct = s.ct;
+    s.handArtMask.setPosition(ct.x, ct.y);
+    s.handArtMask.setAngle(ct.angle);
+    s.handArtMask.setScale(ct.scaleX, ct.scaleY);
   }
 
   _startHandScroll(idx) {
@@ -1237,6 +1282,8 @@ export default class PvpBattleScene extends Phaser.Scene {
       }
       const arrowColor = ptr.y < PLAY_LINE ? 0x44ff88 : 0xaa66ff;
       this._drawArrow(d.ox, d.oy, d.ct.x, d.ct.y, arrowColor);
+      const slot = this._handSlots.find(h => h.ct === d.ct);
+      if (slot) this._syncHandArtMask(slot);
       return;
     }
     if (this.targetMode && this._selOrigin) {

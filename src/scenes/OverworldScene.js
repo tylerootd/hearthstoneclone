@@ -407,8 +407,8 @@ export default class OverworldScene extends Phaser.Scene {
 
   startDuel(npc) {
     const playerDeck = loadDeck();
-    if (!playerDeck || playerDeck.length < 30) {
-      this.showMsg('Build a 30-card deck first!');
+    if (!playerDeck || playerDeck.length < 1) {
+      this.showMsg('You need at least 1 card in your deck!');
       return;
     }
 

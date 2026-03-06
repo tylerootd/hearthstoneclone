@@ -1,5 +1,40 @@
 [
   {
+    "name": "base_deck_1/big_green_ tractor",
+    "file": "base_deck_1_big_green_ tractor.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 20
+  },
+  {
+    "name": "base_deck_1/drought",
+    "file": "base_deck_1_drought.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 20
+  },
+  {
+    "name": "base_deck_1/harvest_season",
+    "file": "base_deck_1_harvest_season.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 25
+  },
+  {
+    "name": "base_deck_1/oldmcdonald",
+    "file": "base_deck_1_oldmcdonald.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 22
+  },
+  {
+    "name": "base_deck_1/world_tree_apple",
+    "file": "base_deck_1_world_tree_apple.png",
+    "frameWidth": 88,
+    "frameHeight": 124,
+    "frameCount": 20
+  },
+  {
     "name": "ice_wolf",
     "file": "ice_wolf.png",
     "frameWidth": 88,

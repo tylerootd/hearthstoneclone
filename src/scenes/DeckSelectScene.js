@@ -102,7 +102,7 @@ export default class DeckSelectScene extends Phaser.Scene {
       this.uiGroup.add(this.add.text(cx, y + rowH / 2 - 8, 'RANDOM DECK', {
         ...FONT, fontSize: '10px', color: isSelected ? '#66aaff' : '#aaa'
       }).setOrigin(0.5));
-      this.uiGroup.add(this.add.text(cx, y + rowH / 2 + 10, 'AI builds a random 30-card deck', {
+      this.uiGroup.add(this.add.text(cx, y + rowH / 2 + 10, 'AI builds a random deck', {
         ...FONT, fontSize: '7px', color: '#666'
       }).setOrigin(0.5));
 

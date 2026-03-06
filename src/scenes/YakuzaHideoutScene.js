@@ -409,10 +409,10 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
 
   startNpcDuel(npc) {
     const playerDeck = loadDeck();
-    if (!playerDeck || playerDeck.length < 30) {
+    if (!playerDeck || playerDeck.length < 1) {
       this.closeDuelPrompt();
       this.dialogueBg.setVisible(true);
-      this.dialogueText.setText('You need a 30-card deck first! Visit the Deck Builder.');
+      this.dialogueText.setText('You need at least 1 card in your deck! Visit the Deck Builder.');
       this.dialogueLocked = false;
       return;
     }

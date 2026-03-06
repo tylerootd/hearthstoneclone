@@ -13,9 +13,22 @@ const MAX_FRAMES = 30;
 
 if (!fs.existsSync(SHEETS_DIR)) fs.mkdirSync(SHEETS_DIR, { recursive: true });
 
-const gifs = fs.readdirSync(SPRITES_DIR).filter(f => f.endsWith('.gif'));
+function findGifs(dir, base = '') {
+  const items = fs.readdirSync(dir, { withFileTypes: true });
+  const gifs = [];
+  for (const item of items) {
+    const rel = base ? `${base}/${item.name}` : item.name;
+    if (item.isDirectory()) {
+      gifs.push(...findGifs(path.join(dir, item.name), rel));
+    } else if (item.name.endsWith('.gif')) {
+      gifs.push({ rel, fullPath: path.join(dir, item.name) });
+    }
+  }
+  return gifs;
+}
+const gifEntries = findGifs(SPRITES_DIR);
 
-if (!gifs.length) {
+if (!gifEntries.length) {
   console.log('[gif-to-sheet] No GIF files found.');
   fs.writeFileSync(path.join(SHEETS_DIR, 'manifest.json'), '[]');
   process.exit(0);
@@ -23,24 +36,24 @@ if (!gifs.length) {
 
 const manifest = [];
 
-for (const gif of gifs) {
-  const name = gif.replace('.gif', '');
-  const gifPath = path.join(SPRITES_DIR, gif);
-  const sheetPath = path.join(SHEETS_DIR, `${name}.png`);
-  const metaPath = path.join(SHEETS_DIR, `${name}.json`);
+for (const { rel, fullPath: gifPath } of gifEntries) {
+  const name = rel.replace(/\.gif$/, '');
+  const fileBase = name.replace(/\//g, '_');
+  const sheetPath = path.join(SHEETS_DIR, `${fileBase}.png`);
+  const metaPath = path.join(SHEETS_DIR, `${fileBase}.json`);
 
   const gifStat = fs.statSync(gifPath);
   if (fs.existsSync(sheetPath) && fs.existsSync(metaPath)) {
     const sheetStat = fs.statSync(sheetPath);
     if (sheetStat.mtimeMs >= gifStat.mtimeMs) {
-      console.log(`[gif-to-sheet] ${gif} — up to date, skipping`);
+      console.log(`[gif-to-sheet] ${rel} — up to date, skipping`);
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
       manifest.push(meta);
       continue;
     }
   }
 
-  console.log(`[gif-to-sheet] Converting ${gif}...`);
+  console.log(`[gif-to-sheet] Converting ${rel}...`);
 
   try {
     const frameData = await gifFrames({ url: gifPath, frames: 'all', outputType: 'png', cumulative: true });
@@ -63,7 +76,7 @@ for (const gif of gifs) {
         stream.on('end', () => resolve(Buffer.concat(chunks)));
         stream.on('error', reject);
       });
-      const img = await sharp(buf).resize(FRAME_W, FRAME_H, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+      const img = await sharp(buf).resize(FRAME_W, FRAME_H, { fit: 'fill' }).png().toBuffer();
       resized.push(img);
     }
 
@@ -74,7 +87,7 @@ for (const gif of gifs) {
       .png({ compressionLevel: 9 })
       .toFile(sheetPath);
 
-    const meta = { name, file: `${name}.png`, frameWidth: FRAME_W, frameHeight: FRAME_H, frameCount: count };
+    const meta = { name, file: `${fileBase}.png`, frameWidth: FRAME_W, frameHeight: FRAME_H, frameCount: count };
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
     manifest.push(meta);
 
