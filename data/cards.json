@@ -30,6 +30,18 @@
   { "id": "base_raid_leader", "name": "Raid Leader", "type": "minion", "cost": 3, "atk": 200, "hp": 200, "sprite": "fire_mage.png", "effect": { "kind": "buff", "target": "friendly_minion", "value": { "atk": 100, "hp": 0 } } },
   { "id": "base_frostwolf", "name": "Frostwolf Grunt", "type": "minion", "cost": 2, "atk": 200, "hp": 200, "sprite": "shadow_fighter.png", "keywords": ["guardian"] },
   { "id": "base_magma", "name": "Magma Rager", "type": "minion", "cost": 3, "atk": 500, "hp": 100, "sprite": "fire_elemental.png" },
+  { "id": "bd1_potato", "name": "Potato", "type": "minion", "cost": 0, "atk": 0, "hp": 100, "sprite": "base_deck_1/potato.jpg", "effect": { "kind": "buff", "target": "friendly_minion", "value": { "atk": 300, "hp": 300 } } },
+  { "id": "bd1_chicken", "name": "Chicken", "type": "minion", "cost": 1, "atk": 100, "hp": 100, "sprite": "base_deck_1/chicken.jpg" },
+  { "id": "bd1_sheep", "name": "Sheep", "type": "minion", "cost": 2, "atk": 200, "hp": 200, "sprite": "base_deck_1/sheep.jpg", "keywords": ["guardian"] },
+  { "id": "bd1_guard_dog", "name": "Guard Dog", "type": "minion", "cost": 2, "atk": 200, "hp": 300, "sprite": "base_deck_1/guard_dog.jpg", "keywords": ["rage", "guardian"] },
+  { "id": "bd1_scarecrow", "name": "Scarecrow", "type": "minion", "cost": 3, "atk": 200, "hp": 500, "sprite": "base_deck_1/scare_crow.jpg", "keywords": ["guardian"] },
+  { "id": "bd1_ox", "name": "Ox", "type": "minion", "cost": 4, "atk": 500, "hp": 500, "sprite": "base_deck_1/ox.jpg" },
+  { "id": "bd1_harvest_season", "name": "Harvest Season", "type": "spell", "cost": 5, "sprite": "base_deck_1/harvest_season.gif", "gif": "base_deck_1/harvest_season.gif", "effect": { "kind": "draw", "target": "self", "value": 3 } },
+  { "id": "bd1_farmers_pitchfork", "name": "Farmer's Pitchfork", "type": "spell", "cost": 1, "sprite": "base_deck_1/farmers_pitchfork.jpg", "effect": { "kind": "buff", "target": "friendly_minion", "value": { "atk": 300, "hp": 0 } } },
+  { "id": "bd1_old_macdonald", "name": "Old MacDonald", "type": "minion", "cost": 6, "atk": 400, "hp": 500, "sprite": "base_deck_1/oldmcdonald.gif", "gif": "base_deck_1/oldmcdonald.gif", "effect": { "kind": "summon", "value": ["bd1_chicken", "bd1_sheep", "bd1_ox"] } },
+  { "id": "bd1_world_tree_apple", "name": "World Tree Apple", "type": "spell", "cost": 4, "sprite": "base_deck_1/world_tree_apple.gif", "gif": "base_deck_1/world_tree_apple.gif", "effect": { "kind": "buffAllFriendly", "value": { "atk": 200, "hp": 200 } } },
+  { "id": "bd1_big_green_tractor", "name": "Big Green Tractor", "type": "minion", "cost": 5, "atk": 500, "hp": 400, "sprite": "base_deck_1/big_green_ tractor.gif", "gif": "base_deck_1/big_green_ tractor.gif", "keywords": ["rage"], "effect": { "kind": "dealDamageAllEnemies", "value": 100 } },
+  { "id": "bd1_drought", "name": "Drought", "type": "spell", "cost": 3, "sprite": "base_deck_1/drought.gif", "gif": "base_deck_1/drought.gif", "effect": { "kind": "manaLock" } },
   { "id": "base_cursed_berserker", "name": "Cursed Berserker", "type": "minion", "cost": 0, "atk": 300, "hp": 300, "sprite": "shadow_fighter.png", "triggers": [
     { "when": "turn_start", "effect": { "kind": "dealDamage", "target": "friendly_hero", "value": 300 } },
     { "when": "turn_end", "effect": { "kind": "dealDamage", "target": "friendly_hero", "value": 300 } }
