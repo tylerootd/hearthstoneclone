@@ -774,10 +774,13 @@ export default class PvpBattleScene extends Phaser.Scene {
         const artKey = getCardTextureKey(this, fullCard);
         if (artKey) {
           ct.add(this.add.rectangle(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, CARD_W, ART_ZONE_HEIGHT, 0xffffff, 1));
-          const maskGfx = this.make.graphics();
+          const maskGfx = this.add.graphics();
           maskGfx.fillRect(-CARD_W / 2, ART_ZONE_TOP, CARD_W, ART_ZONE_HEIGHT);
-          maskGfx.setVisible(false);
-          ct.add(maskGfx);
+          maskGfx.setDepth(29);
+          maskGfx.setPosition(cx, cy);
+          maskGfx.setAngle(ang);
+          this._handArtMasks.push(maskGfx);
+          handArtMask = maskGfx;
           const img = this.add.image(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, artKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT);
           img.setMask(maskGfx.createGeometryMask());
           ct.add(img);
