@@ -7,13 +7,15 @@ let npcList = [];
 let baseDeck1Cards = null;
 let baseDeck2Cards = null;
 
+const base = import.meta.env.BASE_URL || './';
+
 export async function initCardPool() {
   const [cardsRes, spritesRes, npcsRes, deck1Res, deck2Res] = await Promise.all([
-    fetch('./data/cards.json'),
-    fetch('./data/sprites.json'),
-    fetch('./data/npcs.json'),
-    fetch('./assets/Base%20deck%201/deck.json').catch(() => null),
-    fetch('./assets/Base%20deck%202/deck.json').catch(() => null)
+    fetch(base + 'data/cards.json'),
+    fetch(base + 'data/sprites.json'),
+    fetch(base + 'data/npcs.json'),
+    fetch(base + 'assets/Base%20deck%201/deck.json').catch(() => null),
+    fetch(base + 'assets/Base%20deck%202/deck.json').catch(() => null)
   ]);
   baseCards = await cardsRes.json();
   spriteList = await spritesRes.json();
