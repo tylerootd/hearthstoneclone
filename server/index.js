@@ -10,7 +10,7 @@ function makeMinion(card) {
   return { uid: crypto.randomUUID(), id: card.id, name: card.name, cost: card.cost,
     atk: card.atk, hp: card.hp, maxHp: card.hp, effect: card.effect || null,
     triggers: card.triggers || [], keywords: card.keywords ? [...card.keywords] : [],
-    canAttack: false, slot: -1,
+    canAttack: false, attackedThisTurn: false, slot: -1,
     sprite: card.sprite || null, spriteData: card.spriteData || null };
 }
 
@@ -41,7 +41,7 @@ function startTurn(state, who) {
   state.turn++;
   if (side.maxMana < MAX_MANA) side.maxMana++;
   side.mana = side.maxMana;
-  side.board.forEach(m => { m.canAttack = true; });
+  side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
   drawCard(state, who);
   processTriggers(state, who, 'turn_start');
 }
@@ -122,13 +122,13 @@ function minionAttack(state, who, attackerUid, targetInfo) {
   const side = state[who]; const opp = who === 'player' ? state.enemy : state.player;
   const atk = side.board.find(m => m.uid === attackerUid);
   if (!atk || !atk.canAttack) return false;
+  const guardians = opp.board.filter(m => m.keywords && m.keywords.includes('guardian'));
   if (targetInfo.type === 'hero') {
-    const blocker = guardianBlockingHero(atk.slot, opp.board);
-    if (blocker) { state.log.push(`${blocker.name} (Guardian) blocks ${atk.name}!`); return false; }
+    if (guardians.length > 0) { state.log.push(`${guardians[0].name} (Guardian) blocks! Kill all Guardians first.`); return false; }
     opp.hp -= atk.atk; state.log.push(`${atk.name} hits hero for ${atk.atk}`);
   }
-  else { const def = opp.board.find(m => m.uid === targetInfo.uid); if (!def) return false; def.hp -= atk.atk; atk.hp -= def.atk; state.log.push(`${atk.name} vs ${def.name}`); cleanDead(state); }
-  atk.canAttack = false; checkWin(state); return true;
+  else { const def = opp.board.find(m => m.uid === targetInfo.uid); if (!def) return false; if (guardians.length > 0 && !(def.keywords && def.keywords.includes('guardian'))) { state.log.push('Must attack a Guardian first!'); return false; } def.hp -= atk.atk; atk.hp -= def.atk; state.log.push(`${atk.name} vs ${def.name}`); cleanDead(state); }
+  atk.canAttack = false; atk.attackedThisTurn = true; checkWin(state); return true;
 }
 
 function cleanDead(state) {

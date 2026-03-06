@@ -20,6 +20,8 @@ const config = {
   parent: document.body,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
+  input: { mouse: { preventDefaultDown: true }, touch: { capture: true } },
+  disableContextMenu: true,
   physics: {
     default: 'arcade',
     arcade: { debug: false }

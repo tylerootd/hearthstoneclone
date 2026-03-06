@@ -39,14 +39,39 @@ export default class BootScene extends Phaser.Scene {
 
     this.load.image('dragons_den_building', './dragons_den.png');
     this.load.image('battle_board', './battle_board.png');
-    this.load.image('card_frame', './cardgameboarder1.png');
+    // card_frame disabled for now
     this.load.video('win_anim', './Videos/Winning animation mmo pvp.mp4');
+
+    try {
+      const mRes = await fetch('./sprites/sheets/manifest.json');
+      const sheets = await mRes.json();
+      sheets.forEach(s => {
+        const key = 'sheet_' + s.name;
+        this.load.spritesheet(key, `./sprites/sheets/${s.file}`, {
+          frameWidth: s.frameWidth, frameHeight: s.frameHeight
+        });
+      });
+      this._sheetManifest = sheets;
+    } catch (e) {
+      this._sheetManifest = [];
+    }
 
     if (this.game.renderer.type === Phaser.WEBGL) {
       this.game.renderer.pipelines.addPostPipeline('ChromaKeyPostFX', ChromaKeyPostFX);
     }
 
     this.load.once('complete', () => {
+      (this._sheetManifest || []).forEach(s => {
+        const key = 'sheet_' + s.name;
+        if (!this.anims.exists(key)) {
+          this.anims.create({
+            key,
+            frames: this.anims.generateFrameNumbers(key, { start: 0, end: s.frameCount - 1 }),
+            frameRate: 10,
+            repeat: -1
+          });
+        }
+      });
       const arts = loadArtifacts();
       this.scene.start(arts && arts.length > 0 ? 'Hub' : 'ArtifactPick');
     });

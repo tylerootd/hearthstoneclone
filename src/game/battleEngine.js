@@ -53,6 +53,7 @@ function makeMinion(card) {
     triggers: card.triggers || [],
     keywords: card.keywords ? [...card.keywords] : [],
     canAttack: false,
+    attackedThisTurn: false,
     slot: -1
   };
 }
@@ -147,7 +148,7 @@ export function startTurn(state, who) {
   if (side.maxMana < MAX_MANA) side.maxMana++;
   side.mana = side.maxMana;
 
-  side.board.forEach(m => { m.canAttack = true; });
+  side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
 
   drawCard(state, who);
   processTriggers(state, who, 'turn_start');
@@ -296,10 +297,11 @@ export function minionAttack(state, who, attackerUid, targetInfo) {
   const attacker = side.board.find(m => m.uid === attackerUid);
   if (!attacker || !attacker.canAttack) return false;
 
+  const guardians = opp.board.filter(m => m.keywords.includes('guardian'));
+
   if (targetInfo.type === 'hero') {
-    const blocker = guardianBlockingHero(attacker.slot, opp.board);
-    if (blocker) {
-      state.log.push(`${blocker.name} (Guardian) blocks ${attacker.name}!`);
+    if (guardians.length > 0) {
+      state.log.push(`${guardians[0].name} (Guardian) blocks ${attacker.name}! Kill all Guardians first.`);
       return false;
     }
     opp.hp -= attacker.atk;
@@ -307,6 +309,10 @@ export function minionAttack(state, who, attackerUid, targetInfo) {
   } else if (targetInfo.type === 'minion') {
     const defender = opp.board.find(m => m.uid === targetInfo.uid);
     if (!defender) return false;
+    if (guardians.length > 0 && !defender.keywords.includes('guardian')) {
+      state.log.push(`Must attack a Guardian first!`);
+      return false;
+    }
     defender.hp -= attacker.atk;
     attacker.hp -= defender.atk;
     state.log.push(`${attacker.name} (${attacker.atk}/${attacker.hp}) attacks ${defender.name} (${defender.atk}/${defender.hp})`);
@@ -314,6 +320,7 @@ export function minionAttack(state, who, attackerUid, targetInfo) {
   }
 
   attacker.canAttack = false;
+  attacker.attackedThisTurn = true;
   checkWin(state);
   return true;
 }
@@ -380,9 +387,10 @@ export function runEnemyTurn(state) {
   for (const attacker of attackers) {
     if (state.phase === 'over') return;
 
-    const blocker = guardianBlockingHero(attacker.slot, player.board);
-    if (blocker) {
-      minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: blocker.uid });
+    const playerGuardians = player.board.filter(m => m.keywords.includes('guardian'));
+    if (playerGuardians.length > 0) {
+      const target = playerGuardians[Math.floor(Math.random() * playerGuardians.length)];
+      minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: target.uid });
     } else if (player.board.length > 0 && Math.random() < 0.5) {
       const target = player.board[Math.floor(Math.random() * player.board.length)];
       minionAttack(state, 'enemy', attacker.uid, { type: 'minion', uid: target.uid });
