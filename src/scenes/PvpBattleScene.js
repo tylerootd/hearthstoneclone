@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
 import { grantXp } from '../data/progression.js';
 import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from '../data/storage.js';
-import { rebuildPool } from '../data/cardPool.js';
+import { rebuildPool, getCardById } from '../data/cardPool.js';
 import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
@@ -523,6 +523,7 @@ export default class PvpBattleScene extends Phaser.Scene {
   _boardRow(board, yBase, isPlayer) {
     board.forEach((m) => {
       const x = SLOT_X(m.slot != null && m.slot >= 0 ? m.slot : 0), y = yBase;
+      const card = getCardById(m.id);
       const texKey = m.sprite ? (() => {
         const k = 'sprite_' + m.sprite.replace('.png', '');
         return this.textures.exists(k) ? k : null;
