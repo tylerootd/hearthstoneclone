@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { loadCollection, saveCollection, loadDeck, saveDeck, loadCustomCards, loadDeckSlots, saveDeckSlots } from '../data/storage.js';
-import { getCardById, getAllCards, getBaseCards } from '../data/cardPool.js';
+import { getCardById, getAllCards, getBaseCards, getStarterCollection } from '../data/cardPool.js';
 import { getCardTextureKey } from '../utils/cardSprite.js';
 
 const W = 1024, H = 768;
@@ -24,10 +24,10 @@ export default class DeckBuilderScene extends Phaser.Scene {
   }
 
   syncCollection() {
-    const allIds = getAllCards().map(c => c.id);
+    const allowedIds = getStarterCollection();
     const colSet = new Set(this.collectionIds);
     let changed = false;
-    for (const id of allIds) {
+    for (const id of allowedIds) {
       if (!colSet.has(id)) {
         this.collectionIds.push(id);
         colSet.add(id);
@@ -47,7 +47,8 @@ export default class DeckBuilderScene extends Phaser.Scene {
 
     const countMap = {};
     this.collectionIds.forEach(id => { countMap[id] = (countMap[id] || 0) + 1; });
-    const uniqueIds = [...new Set(this.collectionIds)];
+    const allowedSet = new Set(getStarterCollection());
+    const uniqueIds = [...new Set(this.collectionIds)].filter(id => allowedSet.has(id));
 
     const visibleRows = 7;
     const visible = uniqueIds.slice(this.scrollOffset, this.scrollOffset + visibleRows * COLS);

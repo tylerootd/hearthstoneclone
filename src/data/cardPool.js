@@ -40,7 +40,14 @@ export function getNpcList()     { return npcList; }
 export function getNpcById(id)   { return npcList.find(n => n.id === id) || null; }
 
 export function getStarterCollection() {
-  return baseCards.map(c => c.id);
+  if (baseDeck1Cards && baseDeck1Cards.length) {
+    return [...new Set(baseDeck1Cards)];
+  }
+  return [
+    'bd1_potato', 'bd1_chicken', 'bd1_sheep', 'bd1_guard_dog', 'bd1_scarecrow', 'bd1_ox',
+    'bd1_harvest_season', 'bd1_farmers_pitchfork', 'bd1_old_macdonald', 'bd1_world_tree_apple',
+    'bd1_big_green_tractor', 'bd1_drought'
+  ];
 }
 
 export function getStarterDeck() {

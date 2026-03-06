@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts, saveArtifacts } from '../data/storage.js';
-import { getCardById } from '../data/cardPool.js';
+import { getCardById, getStarterDeck } from '../data/cardPool.js';
 import { buildHelpItemsForCard, getPlaceholderHelpItems } from '../utils/helpText.js';
 import { grantXp, loadProgression } from '../data/progression.js';
 import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
@@ -49,7 +49,7 @@ export default class BattleScene extends Phaser.Scene {
     this._helpPanelMinimized = false;
     this._handArtMasks = [];
 
-    const playerDeck = this.battleData.playerDeck || loadDeck() || [];
+    const playerDeck = this.battleData.playerDeck || loadDeck() || getStarterDeck();
     const enemyDeck = this.battleData.enemyDeck || generateEnemyDeck();
     this.playerArtifacts = this.battleData.artifacts || loadArtifacts();
     this.bs = createBattleState(playerDeck, enemyDeck, this.playerArtifacts, loadProgression().level);

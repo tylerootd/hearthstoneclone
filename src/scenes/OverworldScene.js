@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getNpcList, getCardById } from '../data/cardPool.js';
 import { getCardTextureKey } from '../utils/cardSprite.js';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
+import { getStarterDeck } from '../data/cardPool.js';
 import { loadProgression, xpToNext } from '../data/progression.js';
 import { getNpcDeck } from '../data/npcDecks.js';
 import { generateEnemyDeck, ARTIFACT_DEFS } from '../game/battleEngine.js';
@@ -406,11 +407,7 @@ export default class OverworldScene extends Phaser.Scene {
   /* ──────────────────── dueling ─────────────────────────── */
 
   startDuel(npc) {
-    const playerDeck = loadDeck();
-    if (!playerDeck || playerDeck.length < 1) {
-      this.showMsg('You need at least 1 card in your deck!');
-      return;
-    }
+    const playerDeck = loadDeck() || getStarterDeck();
 
     const enemyDeck = getNpcDeck(npc) || generateEnemyDeck();
     const artifacts = loadArtifacts();

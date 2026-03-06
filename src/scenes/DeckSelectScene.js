@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { loadDeck, loadDeckSlots, loadArtifacts } from '../data/storage.js';
-import { getCardById } from '../data/cardPool.js';
+import { getCardById, getStarterDeck } from '../data/cardPool.js';
 import { generateEnemyDeck, ARTIFACT_DEFS } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
@@ -18,7 +18,7 @@ export default class DeckSelectScene extends Phaser.Scene {
   }
 
   buildSlotList() {
-    this.decks = [];
+    this.decks = [{ name: 'Base Deck 1', cards: getStarterDeck() }];
 
     const active = loadDeck();
     if (active && active.length > 0) {
@@ -28,7 +28,7 @@ export default class DeckSelectScene extends Phaser.Scene {
     const slots = loadDeckSlots();
     slots.forEach(s => this.decks.push(s));
 
-    if (this.decks.length > 0) this.playerChoice = 0;
+    this.playerChoice = 0;
   }
 
   redraw() {

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
+import { getStarterDeck } from '../data/cardPool.js';
 import { generateEnemyDeck } from '../game/battleEngine.js';
 import { initMp, setupWs, joinRoom, sendPos, interpRemote, tickChallenge, cleanupMp } from '../multiplayer/mpHelper.js';
 
@@ -408,14 +409,7 @@ export default class YakuzaHideoutScene extends Phaser.Scene {
   }
 
   startNpcDuel(npc) {
-    const playerDeck = loadDeck();
-    if (!playerDeck || playerDeck.length < 1) {
-      this.closeDuelPrompt();
-      this.dialogueBg.setVisible(true);
-      this.dialogueText.setText('You need at least 1 card in your deck! Visit the Deck Builder.');
-      this.dialogueLocked = false;
-      return;
-    }
+    const playerDeck = loadDeck() || getStarterDeck();
 
     const enemyDeck = generateEnemyDeck();
     const artifacts = loadArtifacts();

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { loadDeck, loadArtifacts } from '../data/storage.js';
+import { getStarterDeck } from '../data/cardPool.js';
 import { getCardById } from '../data/cardPool.js';
 import { initMp, setupWs, joinRoom, sendPos, interpRemote, tickChallenge, cleanupMp, sendName, sendChat } from '../multiplayer/mpHelper.js';
 
@@ -197,7 +198,7 @@ export default class MmoMapScene extends Phaser.Scene {
 
       this.ws.onopen = () => {
         sendName(this, this._username);
-        const deckIds = loadDeck() || [];
+        const deckIds = loadDeck() || getStarterDeck();
         const cards = deckIds.map(id => getCardById(id)).filter(Boolean);
         const artifacts = loadArtifacts() || [];
         this.ws.send(JSON.stringify({ type: 'deck', cards, artifacts }));
