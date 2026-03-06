@@ -511,7 +511,7 @@ export default class BattleScene extends Phaser.Scene {
         .setStrokeStyle(1, 0xff0077).setDepth(10));
       this._ui(this.add.rectangle(x, barY + BAR_H / 2, CARD_W - 2, 1, 0x00ffee, 0.3)
         .setDepth(11));
-      const nameOff = 18;
+      const nameOff = 14;
       const nst = { ...FONT, fontSize: '7px', color: '#00ffee', stroke: '#002222', strokeThickness: 1 };
       const nameText = this._ui(this.add.text(x + nameOff / 2, barY, m.name, nst).setOrigin(0.5).setDepth(12));
       if (nameText.width > CARD_W - nameOff - 6) {
@@ -584,7 +584,7 @@ export default class BattleScene extends Phaser.Scene {
       if (readyToAct) {
         this._ui(this.add.rectangle(s0x, kwBarY, slotW, BAR_H, 0x3d2800, 0.95)
           .setStrokeStyle(1, 0xddaa22).setDepth(13));
-        this._ui(this.add.text(s0x, kwBarY, '\u2694', { fontSize: '11px', fontStyle: 'bold' })
+        this._ui(this.add.text(s0x, kwBarY, '\u2694', { fontSize: '9px', fontStyle: 'bold' })
           .setOrigin(0.5).setDepth(14));
       } else if (!m.canAttack && isPlayer) {
         this._ui(this.add.rectangle(s0x, kwBarY, slotW, BAR_H, 0x222233, 0.95)
