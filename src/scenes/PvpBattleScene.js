@@ -7,6 +7,7 @@ import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian } from '../game/bat
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
+const CARD_ART_ZOOM = 1.4;
 const BAR_H = 18;
 const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
@@ -44,6 +45,9 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._helpPanel = null;
     this._helpPanelMinimized = false;
     this.resultShown = false;
+    this._opponentHover = null;
+    this._opponentHoverGfx = null;
+    this._lastSentHover = undefined;
 
     this.add.image(W / 2, H / 2, 'battle_board').setDisplaySize(W, H).setDepth(0);
     this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.32).setDepth(1)
@@ -70,6 +74,7 @@ export default class PvpBattleScene extends Phaser.Scene {
         if (msg.type === 'pvp_state') {
           if (this.resultShown) return;
           this.state = msg;
+          this._opponentHover = null;
           this.selecting = null;
           this.targetMode = false;
           this._positionMode = false;
@@ -77,6 +82,10 @@ export default class PvpBattleScene extends Phaser.Scene {
           this._dragCard = null;
           this.arrowGfx.clear();
           this.redraw();
+        }
+        if (msg.type === 'pvp_opponent_hover') {
+          this._opponentHover = msg.hover ?? null;
+          this._updateOpponentHoverIndicator();
         }
       } catch (e) { console.error('[PvP] parse error:', e); }
     };
@@ -108,6 +117,7 @@ export default class PvpBattleScene extends Phaser.Scene {
     this.arrowGfx.clear();
     this._destroySwordCursor();
     this._clearHelpTool();
+    this._sendHover(null);
     this.redraw();
   }
 
@@ -456,6 +466,7 @@ export default class PvpBattleScene extends Phaser.Scene {
     }
 
     if (s.phase === 'over') this.showResult();
+    this._updateOpponentHoverIndicator();
   }
 
   _drawBoardFrames(y) {
@@ -507,8 +518,8 @@ export default class PvpBattleScene extends Phaser.Scene {
       if (!blocked) {
         bg.setInteractive({ useHandCursor: true });
         bg.on('pointerdown', () => this._onTarget({ type: 'hero' }));
-        bg.on('pointerover', () => { bg.setStrokeStyle(3, 0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(null, x, y, true); });
-        bg.on('pointerout', () => { bg.setStrokeStyle(2, stroke); this._hideDmgPreview(); });
+        bg.on('pointerover', () => { bg.setStrokeStyle(3, 0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(null, x, y, true); this._sendHover({ targetHero: true }); });
+        bg.on('pointerout', () => { bg.setStrokeStyle(2, stroke); this._hideDmgPreview(); this._sendHover(null); });
       } else {
         const bx = W / 2, by = y;
         this._ui(this.add.rectangle(bx, by, 300, 36, 0x000000, 0.85).setStrokeStyle(2, 0xff4444).setDepth(100));
@@ -532,14 +543,19 @@ export default class PvpBattleScene extends Phaser.Scene {
       const bc = isGuardian ? 0x33ddff : (isPlayer ? 0x337744 : 0x774433);
 
 
-      const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0x0d0d1a, 0.9).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
+      const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
       const animKey = card ? getCardAnimKey(this, card) : null;
       if (animKey) {
         const spr = this.add.sprite(x, y, animKey).setDisplaySize(CARD_W, CARD_H).setDepth(10.5);
         spr.play(animKey);
         this._ui(spr);
       } else if (texKey) {
-        this._ui(this.add.image(x, y, texKey).setDisplaySize(CARD_W, CARD_H).setDepth(10.5));
+        const img = this.add.image(x, y, texKey).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM).setDepth(10.5);
+        const maskGfx = this.make.graphics();
+        maskGfx.fillRect(x - CARD_W / 2, y - CARD_H / 2, CARD_W, CARD_H);
+        img.setMask(maskGfx.createGeometryMask());
+        this._nameMasks.push(maskGfx);
+        this._ui(img);
       }
 
       const boardFullH = CARD_H + BAR_H * 2;
@@ -666,6 +682,7 @@ export default class PvpBattleScene extends Phaser.Scene {
         });
         fr.on('pointerover', () => {
           showBoardGlow(0x44ff44);
+          this._sendHover({ myBoard: m.slot });
           if (!this.targetMode) {
             const tips = [{ msg: 'Unit can attack', icon: 'sword' }];
             if (isGuardian) tips.push({ msg: 'Units with Guardian block all incoming attacks', icon: 'guardian' });
@@ -681,9 +698,11 @@ export default class PvpBattleScene extends Phaser.Scene {
         fr.on('pointerout', () => {
           hideBoardGlow();
           this._clearHelpTool();
+          this._sendHover(null);
         });
       } else if (!m.canAttack && isPlayer && !this.targetMode) {
         fr.on('pointerover', () => {
+          this._sendHover({ myBoard: m.slot });
           const tips = [];
           const msg = m.attackedThisTurn
             ? 'Unit has already attacked this turn'
@@ -703,14 +722,14 @@ export default class PvpBattleScene extends Phaser.Scene {
         const canTarget = !guardiansExist || isGuardian;
         if (canTarget) {
           fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
-          fr.on('pointerover', () => { showBoardGlow(0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(m, x, y, false); });
-          fr.on('pointerout', () => { hideBoardGlow(); this._hideDmgPreview(); });
+          fr.on('pointerover', () => { showBoardGlow(0xff4444); this._sendHover({ targetMinion: m.slot }); if (this.selecting?.type === 'attack') this._showDmgPreview(m, x, y, false); });
+          fr.on('pointerout', () => { hideBoardGlow(); this._hideDmgPreview(); this._sendHover(null); });
         }
       }
       if (this.targetMode && isPlayer && this.selecting?.needsFriendly) {
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
-        fr.on('pointerover', () => showBoardGlow(0x4499ff));
-        fr.on('pointerout', () => hideBoardGlow());
+        fr.on('pointerover', () => { showBoardGlow(0x4499ff); this._sendHover({ targetMinion: m.slot }); });
+        fr.on('pointerout', () => { hideBoardGlow(); this._sendHover(null); });
       }
     });
   }
@@ -738,7 +757,7 @@ export default class PvpBattleScene extends Phaser.Scene {
 
       const ct = this.add.container(cx, cy).setDepth(30 + i).setAngle(ang);
 
-      ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0x0c0c1e, 0.95)
+      ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95)
         .setStrokeStyle(ok ? 2 : 1, ok ? 0x44aaff : 0x2a2a3a));
 
       const handAnimKey = getCardAnimKey(this, card);
@@ -748,7 +767,14 @@ export default class PvpBattleScene extends Phaser.Scene {
         ct.add(spr);
       } else {
         const artKey = getCardTextureKey(this, card);
-        if (artKey) ct.add(this.add.image(0, 0, artKey).setDisplaySize(CARD_W, CARD_H));
+        if (artKey) {
+          const img = this.add.image(0, 0, artKey).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM);
+          const maskGfx = this.make.graphics();
+          maskGfx.fillRect(cx - CARD_W / 2, cy - CARD_H / 2, CARD_W, CARD_H);
+          img.setMask(maskGfx.createGeometryMask());
+          this._nameMasks.push(maskGfx);
+          ct.add(img);
+        }
       }
 
 
@@ -840,7 +866,7 @@ export default class PvpBattleScene extends Phaser.Scene {
   /* ═══════ HAND HOVER (slot-based, no overlap issues) ═══════ */
   _updateHandHover(ptr) {
     if (this.targetMode || this._dragCard) {
-      if (this._hoveredIdx >= 0) { this._unhoverSlot(this._hoveredIdx); this._hoveredIdx = -1; }
+      if (this._hoveredIdx >= 0) { this._unhoverSlot(this._hoveredIdx); this._hoveredIdx = -1; this._sendHover(null); }
       return;
     }
     const hitIdx = this._handIdxAt(ptr.x, ptr.y);
@@ -848,6 +874,7 @@ export default class PvpBattleScene extends Phaser.Scene {
     if (this._hoveredIdx >= 0) this._unhoverSlot(this._hoveredIdx);
     if (hitIdx >= 0) this._hoverSlot(hitIdx);
     this._hoveredIdx = hitIdx;
+    this._sendHover(hitIdx >= 0 ? { hand: hitIdx } : null);
   }
 
   _hoverSlot(idx) {
@@ -1327,10 +1354,12 @@ export default class PvpBattleScene extends Phaser.Scene {
       slot.on('pointerover', () => {
         slot.setFillStyle(0x442266, 0.65);
         slot.setStrokeStyle(3, 0xcc66ff);
+        this._sendHover({ positionSlot: s });
       });
       slot.on('pointerout', () => {
         slot.setFillStyle(0x2a1a3a, 0.35);
         slot.setStrokeStyle(2, 0xaa44ff);
+        this._sendHover(null);
       });
       slot.on('pointerdown', () => this._onPositionPick(s));
     }
@@ -1364,6 +1393,47 @@ export default class PvpBattleScene extends Phaser.Scene {
   _send(msg) {
     if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify(msg));
+  }
+
+  _sendHover(hover) {
+    const key = hover ? JSON.stringify(hover) : 'null';
+    if (key === this._lastSentHover) return;
+    this._lastSentHover = key;
+    this._send({ type: 'pvp_hover', hover });
+  }
+
+  _updateOpponentHoverIndicator() {
+    if (this._opponentHoverGfx) { this._opponentHoverGfx.destroy(); this._opponentHoverGfx = null; }
+    const h = this._opponentHover;
+    if (!h || !this.state) return;
+    const gfx = this.add.graphics().setDepth(22);
+    const HOVER_COL = 0x00ccff;
+    const HOVER_ALPHA = 0.5;
+    gfx.lineStyle(3, HOVER_COL, 0.9);
+    gfx.fillStyle(HOVER_COL, HOVER_ALPHA * 0.2);
+    if (h.hand != null) {
+      const count = this.state.opponent.handCount || 0;
+      const sp = Math.min(28, 220 / Math.max(count, 1));
+      const sx = W / 2 - (count - 1) * sp / 2;
+      const x = sx + h.hand * sp, y = 14;
+      gfx.fillRoundedRect(x - 11, y - 15, 22, 30, 2);
+      gfx.strokeRoundedRect(x - 11, y - 15, 22, 30, 2);
+    } else if (h.myBoard != null || h.positionSlot != null) {
+      const slot = h.myBoard ?? h.positionSlot;
+      const x = SLOT_X(slot), y = BOARD_Y.enemy;
+      gfx.fillRoundedRect(x - CARD_W / 2 - 2, y - CARD_H / 2 - 2, CARD_W + 4, CARD_H + 4, 4);
+      gfx.strokeRoundedRect(x - CARD_W / 2 - 2, y - CARD_H / 2 - 2, CARD_W + 4, CARD_H + 4, 4);
+    } else if (h.targetHero) {
+      const x = W / 2, y = HERO_Y.player;
+      gfx.fillRoundedRect(x - 122, y - 29, 244, 62, 4);
+      gfx.strokeRoundedRect(x - 122, y - 29, 244, 62, 4);
+    } else if (h.targetMinion != null) {
+      const x = SLOT_X(h.targetMinion), y = BOARD_Y.player;
+      gfx.fillRoundedRect(x - CARD_W / 2 - 2, y - CARD_H / 2 - 2, CARD_W + 4, CARD_H + 4, 4);
+      gfx.strokeRoundedRect(x - CARD_W / 2 - 2, y - CARD_H / 2 - 2, CARD_W + 4, CARD_H + 4, 4);
+    } else return;
+    this.uiGroup.add(gfx);
+    this._opponentHoverGfx = gfx;
   }
 
   _float(x, y, text, color) {

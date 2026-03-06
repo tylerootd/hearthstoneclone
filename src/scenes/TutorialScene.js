@@ -205,7 +205,7 @@ export default class TutorialScene extends Phaser.Scene {
     }
 
     if (type === 'board') {
-      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0xf5f5f8, 0.9)
         .setStrokeStyle(2, 0x337744).setDepth(4));
       this._ui(this.add.text(cx, cy - 30, 'Raptor', {
         ...FONT, fontSize: '7px', color: '#ddd'
@@ -218,7 +218,7 @@ export default class TutorialScene extends Phaser.Scene {
     }
 
     if (type === 'rage') {
-      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0xf5f5f8, 0.9)
         .setStrokeStyle(2, 0x337744).setDepth(4));
       this._ui(this.add.text(cx, cy - 30, 'Wolfrider', {
         ...FONT, fontSize: '6px', color: '#ddd'
@@ -235,12 +235,12 @@ export default class TutorialScene extends Phaser.Scene {
 
     if (type === 'attack') {
       const ax = cx - 80, bx = cx + 80;
-      this._ui(this.add.rectangle(ax, cy, 60, 80, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(ax, cy, 60, 80, 0xf5f5f8, 0.9)
         .setStrokeStyle(2, 0x337744).setDepth(4));
       this._ui(this.add.text(ax, cy - 20, 'YOU', { ...FONT, fontSize: '6px', color: '#66ff66' }).setOrigin(0.5).setDepth(5));
       this._ui(this.add.text(ax, cy + 10, '4/5', { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(5));
 
-      this._ui(this.add.rectangle(bx, cy, 60, 80, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(bx, cy, 60, 80, 0xf5f5f8, 0.9)
         .setStrokeStyle(2, 0x774433).setDepth(4));
       this._ui(this.add.text(bx, cy - 20, 'ENEMY', { ...FONT, fontSize: '6px', color: '#ff6666' }).setOrigin(0.5).setDepth(5));
       this._ui(this.add.text(bx, cy + 10, '3/2', { ...FONT, fontSize: '9px', color: '#fff' }).setOrigin(0.5).setDepth(5));
@@ -249,7 +249,7 @@ export default class TutorialScene extends Phaser.Scene {
     }
 
     if (type === 'guardian') {
-      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0xf5f5f8, 0.9)
         .setStrokeStyle(3, 0x33ddff).setDepth(4));
       this._ui(this.add.rectangle(cx, cy, CARD_W + 8, CARD_H + 8, 0x11aacc, 0.12)
         .setDepth(3));
@@ -263,7 +263,7 @@ export default class TutorialScene extends Phaser.Scene {
     }
 
     if (type === 'spell') {
-      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0x0d0d1a, 0.9)
+      this._ui(this.add.rectangle(cx, cy, CARD_W, CARD_H, 0xf5f5f8, 0.9)
         .setStrokeStyle(2, 0x8855cc).setDepth(4));
       this._ui(this.add.text(cx, cy - 24, 'Fireball', {
         ...FONT, fontSize: '7px', color: '#ddd'

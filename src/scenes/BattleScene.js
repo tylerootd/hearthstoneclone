@@ -12,6 +12,7 @@ import {
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
+const CARD_ART_ZOOM = 1.4;
 const BAR_H = 18;
 const BOARD_GAP = CARD_W + 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial' };
@@ -512,14 +513,19 @@ export default class BattleScene extends Phaser.Scene {
       const bc = isGuardian ? 0x33ddff : (isPlayer ? 0x337744 : 0x774433);
 
 
-      const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0x0d0d1a, 0.9).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
+      const fr = this._ui(this.add.rectangle(x, y, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(isGuardian ? 3 : 2, bc).setDepth(10));
       const animKey = card ? getCardAnimKey(this, card) : null;
       if (animKey) {
         const spr = this.add.sprite(x, y, animKey).setDisplaySize(CARD_W, CARD_H).setDepth(10.5);
         spr.play(animKey);
         this._ui(spr);
       } else if (tex) {
-        this._ui(this.add.image(x, y, tex).setDisplaySize(CARD_W, CARD_H).setDepth(10.5));
+        const img = this.add.image(x, y, tex).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM).setDepth(10.5);
+        const maskGfx = this.make.graphics();
+        maskGfx.fillRect(x - CARD_W / 2, y - CARD_H / 2, CARD_W, CARD_H);
+        img.setMask(maskGfx.createGeometryMask());
+        this._nameMasks.push(maskGfx);
+        this._ui(img);
       }
 
       const boardFullH = CARD_H + BAR_H * 2;
@@ -718,7 +724,7 @@ export default class BattleScene extends Phaser.Scene {
 
       const ct = this.add.container(cx, cy).setDepth(30 + i).setAngle(ang);
 
-      ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0x0c0c1e, 0.95)
+      ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95)
         .setStrokeStyle(ok ? 2 : 1, ok ? 0x44aaff : 0x2a2a3a));
 
       const handAnimKey = getCardAnimKey(this, card);
@@ -728,7 +734,14 @@ export default class BattleScene extends Phaser.Scene {
         ct.add(spr);
       } else {
         const artKey = getCardTextureKey(this, card);
-        if (artKey) ct.add(this.add.image(0, 0, artKey).setDisplaySize(CARD_W, CARD_H));
+        if (artKey) {
+          const img = this.add.image(0, 0, artKey).setDisplaySize(CARD_W * CARD_ART_ZOOM, CARD_H * CARD_ART_ZOOM);
+          const maskGfx = this.make.graphics();
+          maskGfx.fillRect(cx - CARD_W / 2, cy - CARD_H / 2, CARD_W, CARD_H);
+          img.setMask(maskGfx.createGeometryMask());
+          this._nameMasks.push(maskGfx);
+          ct.add(img);
+        }
       }
 
 

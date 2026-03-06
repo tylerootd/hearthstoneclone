@@ -322,6 +322,14 @@ wss.on('connection', (ws) => {
         if (challenger) send(challenger.ws, { type: 'declined', byId: id });
       }
 
+      // ── PvP hover (opponent deciding, forward to other player) ──
+      else if (msg.type === 'pvp_hover') {
+        const b = me.battleId ? battles.get(me.battleId) : null;
+        if (!b || b.state.phase === 'over') return;
+        const other = b.p1.playerId === id ? b.p2 : b.p1;
+        send(other.ws, { type: 'pvp_opponent_hover', hover: msg.hover });
+      }
+
       // ── PvP ready (client scene loaded, wants state) ──
       else if (msg.type === 'pvp_ready') {
         const b = me.battleId ? battles.get(me.battleId) : null;
