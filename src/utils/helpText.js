@@ -6,11 +6,12 @@
 const KEYWORD_DEFS = {
   guardian: { icon: 'guardian', msg: 'Guardian: Must be attacked first. Blocks all attacks to your hero until defeated.' },
   rage: { icon: 'sword', msg: 'Charge (Rage): Can attack immediately on the turn it is played.' },
+  attacksTwice: { icon: 'sword', msg: 'Can attack twice per turn.' },
 };
 
 const EFFECT_DEFS = {
   dealDamage: (e, card) => {
-    const val = (e.value / 100) | 0;
+    const val = e.value ?? 0;
     const isSpell = card?.type === 'spell';
     const prefix = isSpell ? '' : 'Battlecry: ';
     const icon = isSpell ? 'spell' : 'battlecry';
@@ -20,7 +21,7 @@ const EFFECT_DEFS = {
     return { icon, msg: `${prefix}Deal ${val} damage to target.` };
   },
   heal: (e, card) => {
-    const val = (e.value / 100) | 0;
+    const val = e.value ?? 0;
     const isSpell = card?.type === 'spell';
     const prefix = isSpell ? '' : 'Battlecry: ';
     const icon = isSpell ? 'spell' : 'battlecry';
@@ -35,9 +36,14 @@ const EFFECT_DEFS = {
     const icon = isSpell ? 'spell' : 'battlecry';
     return { icon, msg: `${prefix}Draw ${n} card${n > 1 ? 's' : ''}.` };
   },
+  drawOverTurns: (e, card) => {
+    const n = e.value || 2;
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    return { icon, msg: `Draw ${n} cards over ${n} turns (1 now, ${n - 1} at start of your next turn).` };
+  },
   buff: (e, card) => {
-    const atk = ((e.value.atk || 0) / 100) | 0;
-    const hp = ((e.value.hp || 0) / 100) | 0;
+    const atk = e.value?.atk ?? 0;
+    const hp = e.value?.hp ?? 0;
     const parts = [];
     if (atk) parts.push(`+${atk} Attack`);
     if (hp) parts.push(`+${hp} Health`);
@@ -47,15 +53,15 @@ const EFFECT_DEFS = {
     return { icon, msg: `${prefix}Give a friendly minion ${parts.join(' and ')}.` };
   },
   buffAllFriendly: (e, card) => {
-    const atk = ((e.value.atk || 0) / 100) | 0;
-    const hp = ((e.value.hp || 0) / 100) | 0;
+    const atk = e.value?.atk ?? 0;
+    const hp = e.value?.hp ?? 0;
     const isSpell = card?.type === 'spell';
     const prefix = isSpell ? '' : 'Battlecry: ';
     const icon = isSpell ? 'spell' : 'battlecry';
     return { icon, msg: `${prefix}Give ALL friendly minions +${atk}/+${hp}.` };
   },
   dealDamageAllEnemies: (e, card) => {
-    const val = (e.value / 100) | 0;
+    const val = e.value ?? 0;
     const isSpell = card?.type === 'spell';
     const prefix = isSpell ? '' : 'Battlecry: ';
     const icon = isSpell ? 'spell' : 'battlecry';
@@ -71,6 +77,46 @@ const EFFECT_DEFS = {
   manaLock: (e, card) => {
     const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
     return { icon, msg: 'Your opponent cannot spend mana on their next turn.' };
+  },
+  dealDamageAndDraw: (e, card) => {
+    const damage = e.damage ?? 0;
+    const draw = e.draw || 0;
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    const dmgPart = e.target === 'enemy_any' ? `Deal ${damage} damage to a chosen enemy (minion or hero)` : `Deal ${damage} damage`;
+    const drawPart = draw > 0 ? ` and draw ${draw} card${draw > 1 ? 's' : ''}` : '';
+    return { icon, msg: `${dmgPart}${drawPart}.` };
+  },
+  drawRandom: (e, card) => {
+    const min = e.min || 0;
+    const max = e.max || min;
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    const msg = min === max ? `Draw ${min} card${min !== 1 ? 's' : ''}.` : `Draw a random number of cards (${min}-${max}).`;
+    return { icon, msg };
+  },
+  dealDamageBothHeroes: (e, card) => {
+    const val = e.value ?? 0;
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    return { icon, msg: `Deal ${val} damage to BOTH heroes.` };
+  },
+  skipOpponentTurn: (e, card) => {
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    return { icon, msg: 'Your opponent skips their next turn.' };
+  },
+  dealDamageAll: (e, card) => {
+    const val = e.value ?? 0;
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    return { icon, msg: `Deal ${val} damage to ALL minions and BOTH heroes.` };
+  },
+  freeCardsThisTurn: (e, card) => {
+    const icon = card?.type === 'spell' ? 'spell' : 'battlecry';
+    return { icon, msg: 'All your cards cost 0 this turn.' };
+  },
+  newShoes: (e, card) => {
+    const items = [
+      { icon: 'spell', msg: 'Skip opponent\'s turn.' },
+      { icon: 'spell', msg: 'Equip on Lady Luck: Transform her into Lady Luck with Shoes (Charge + Attack twice, 750/1600).' }
+    ];
+    return items;
   },
 };
 
@@ -90,7 +136,11 @@ export function buildHelpItemsForCard(card) {
   }
   if (card.effect) {
     const fn = EFFECT_DEFS[card.effect.kind];
-    if (fn) items.push(fn(card.effect, card));
+    if (fn) {
+      const result = fn(card.effect, card);
+      if (Array.isArray(result)) items.push(...result);
+      else items.push(result);
+    }
   }
   if (card.triggers && Array.isArray(card.triggers)) {
     for (const t of card.triggers) {

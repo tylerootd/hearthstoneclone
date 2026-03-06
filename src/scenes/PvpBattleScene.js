@@ -4,7 +4,7 @@ import { buildHelpItemsForCard, getPlaceholderHelpItems } from '../utils/helpTex
 import { grantXp } from '../data/progression.js';
 import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from '../data/storage.js';
 import { rebuildPool, getCardById } from '../data/cardPool.js';
-import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian } from '../game/battleEngine.js';
+import { ARTIFACT_DEFS, guardianBlockingHero, hasAnyGuardian, hasLadyLuckOnBoard, isNewShoesWithEquipOption } from '../game/battleEngine.js';
 
 const W = 1024, H = 768;
 const CARD_W = 88, CARD_H = 124;
@@ -722,7 +722,9 @@ export default class PvpBattleScene extends Phaser.Scene {
       if (this.targetMode && !isPlayer) {
         const oppBoard = this.state?.opponent?.board || [];
         const guardiansExist = hasAnyGuardian(oppBoard);
-        const canTarget = !guardiansExist || isGuardian;
+        const canTarget = this.selecting?.type === 'attack'
+          ? (!guardiansExist || isGuardian)
+          : true;
         if (canTarget) {
           fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
           fr.on('pointerover', () => { showBoardGlow(0xff4444); this._sendHover({ targetMinion: m.slot }); if (this.selecting?.type === 'attack') this._showDmgPreview(m, x, y, false); });
@@ -730,6 +732,8 @@ export default class PvpBattleScene extends Phaser.Scene {
         }
       }
       if (this.targetMode && isPlayer && this.selecting?.needsFriendly) {
+        const reqId = this.selecting?.requireMinionId;
+        if (reqId && m.id !== reqId) return;
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
         fr.on('pointerover', () => { showBoardGlow(0x4499ff); this._sendHover({ targetMinion: m.slot }); });
         fr.on('pointerout', () => { hideBoardGlow(); this._sendHover(null); });
@@ -1357,6 +1361,14 @@ export default class PvpBattleScene extends Phaser.Scene {
   }
 
   _playSpell(idx, card, ox, oy) {
+    if (isNewShoesWithEquipOption(card)) {
+      if (hasLadyLuckOnBoard(this.state, 'player')) {
+        this._showNewShoesChoice(idx, card, ox, oy);
+      } else {
+        this._send({ type: 'pvp_play_card', handIndex: idx, target: null });
+      }
+      return;
+    }
     const nt = card.effect && (card.effect.target === 'enemy_any' || card.effect.target === 'friendly_minion');
     if (nt) {
       this.selecting = {
@@ -1369,6 +1381,38 @@ export default class PvpBattleScene extends Phaser.Scene {
     } else {
       this._send({ type: 'pvp_play_card', handIndex: idx, target: null });
     }
+  }
+
+  _showNewShoesChoice(idx, card, ox, oy) {
+    const container = this.add.container(0, 0);
+    container.setDepth(200);
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.7).setInteractive();
+    const panel = this.add.rectangle(W / 2, H / 2, 420, 180, 0x1a1a2a).setStrokeStyle(2, 0x4466aa);
+    const titleTxt = this.add.text(W / 2, H / 2 - 60, 'NEW SHOES', { ...FONT, fontSize: '14px', color: '#e6b422' }).setOrigin(0.5);
+    const subTxt = this.add.text(W / 2, H / 2 - 32, 'Choose an effect:', { ...FONT, fontSize: '8px', color: '#aaa' }).setOrigin(0.5);
+    const skipBtn = this.add.rectangle(W / 2 - 95, H / 2 + 25, 160, 36, 0x224422).setInteractive({ useHandCursor: true });
+    skipBtn.setStrokeStyle(1, 0x44aa44);
+    const skipTxt = this.add.text(W / 2 - 95, H / 2 + 25, 'SKIP OPPONENT TURN', { ...FONT, fontSize: '6px', color: '#88ff88' }).setOrigin(0.5);
+    const equipBtn = this.add.rectangle(W / 2 + 95, H / 2 + 25, 160, 36, 0x222244).setInteractive({ useHandCursor: true });
+    equipBtn.setStrokeStyle(1, 0x4466aa);
+    const equipTxt = this.add.text(W / 2 + 95, H / 2 + 25, 'EQUIP ONTO LADY LUCK', { ...FONT, fontSize: '6px', color: '#88ccff' }).setOrigin(0.5);
+    container.add([overlay, panel, titleTxt, subTxt, skipBtn, skipTxt, equipBtn, equipTxt]);
+
+    skipBtn.on('pointerdown', () => {
+      container.destroy();
+      this._send({ type: 'pvp_play_card', handIndex: idx, target: null });
+    });
+    equipBtn.on('pointerdown', () => {
+      container.destroy();
+      this.selecting = {
+        type: 'play', handIndex: idx, card,
+        needsFriendly: true,
+        requireMinionId: 'bd2_lady_luck'
+      };
+      this._selOrigin = { x: ox, y: oy };
+      this.targetMode = true;
+      this.redraw();
+    });
   }
 
   /* ═══════ POSITION SLOTS (7 card-sized, click to place) ═══════ */

@@ -5,7 +5,7 @@ import { loadNpcDeckOverrides, saveNpcDeckOverride, removeNpcDeckOverride } from
 
 const W = 1024, H = 768;
 const VALID_TYPES = ['minion', 'spell'];
-const VALID_EFFECTS = ['dealDamage', 'heal', 'draw', 'buff'];
+const VALID_EFFECTS = ['dealDamage', 'heal', 'draw', 'drawOverTurns', 'buff'];
 const VALID_TARGETS = ['enemy_any', 'enemy_hero', 'friendly_hero', 'friendly_minion', 'self'];
 const VALID_TRIGGERS = ['turn_start', 'turn_end'];
 
@@ -908,9 +908,12 @@ export default class MasterModeScene extends Phaser.Scene {
   validateEffect(e) {
     if (typeof e !== 'object') return 'effect: object.';
     if (!VALID_EFFECTS.includes(e.kind)) return `kind: ${VALID_EFFECTS.join(', ')}`;
-    if (!VALID_TARGETS.includes(e.target)) return `target: ${VALID_TARGETS.join(', ')}`;
+    if (e.kind !== 'drawOverTurns' && !VALID_TARGETS.includes(e.target)) return `target: ${VALID_TARGETS.join(', ')}`;
     if (['dealDamage', 'heal', 'draw'].includes(e.kind)) {
       if (typeof e.value !== 'number' || !Number.isInteger(e.value) || e.value < 0) return `value: int >= 0 for ${e.kind}.`;
+    }
+    if (e.kind === 'drawOverTurns') {
+      if (typeof e.value !== 'number' || !Number.isInteger(e.value) || e.value < 1) return 'value: int >= 1 for drawOverTurns.';
     }
     if (e.kind === 'buff') {
       if (typeof e.value !== 'object' || typeof e.value.atk !== 'number' || typeof e.value.hp !== 'number')

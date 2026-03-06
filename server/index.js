@@ -47,9 +47,11 @@ function startTurn(state, who) {
   } else {
     side.mana = side.maxMana;
   }
+  if (state.freeCardsThisTurn) state.freeCardsThisTurn = null;
   side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
   drawCard(state, who);
   processTriggers(state, who, 'turn_start');
+  processPendingDraws(state, who);
 }
 
 function endTurnTriggers(state, who) {
@@ -61,6 +63,16 @@ function endTurnTriggers(state, who) {
     opp.hp -= 300; state.log.push('Fireball Turret: 300 damage!'); checkWin(state);
   }
   */
+}
+
+function processPendingDraws(state, who) {
+  if (!state.pendingDraws || state.pendingDraws.length === 0) return;
+  const toProcess = state.pendingDraws.filter(p => p.who === who);
+  state.pendingDraws = state.pendingDraws.filter(p => p.who !== who);
+  for (const p of toProcess) {
+    for (let i = 0; i < p.amount; i++) drawCard(state, who);
+  }
+  checkWin(state);
 }
 
 function processTriggers(state, who, timing) {
@@ -76,9 +88,11 @@ function processTriggers(state, who, timing) {
 function playCard(state, who, handIndex, targetInfo, boardPos) {
   const side = state[who]; const opp = who === 'player' ? state.enemy : state.player;
   const card = side.hand[handIndex];
-  if (!card || card.cost > side.mana) return false;
+  if (!card) return false;
+  const effectiveCost = state.freeCardsThisTurn === who ? 0 : card.cost;
+  if (effectiveCost > side.mana) return false;
   if (card.type === 'minion' && side.board.length >= MAX_BOARD) return false;
-  side.mana -= card.cost; side.hand.splice(handIndex, 1);
+  side.mana -= effectiveCost; side.hand.splice(handIndex, 1);
   state.log.push(`${who} plays ${card.name}`);
   if (card.type === 'minion') {
     const minion = makeMinion(card);
@@ -116,6 +130,17 @@ function applyEffect(state, who, effect, targetInfo, src) {
       break;
     }
     case 'draw': { for (let i = 0; i < effect.value; i++) drawCard(state, who); break; }
+    case 'drawOverTurns': {
+      const total = effect.value || 2;
+      const now = Math.min(1, total);
+      const next = total - now;
+      for (let i = 0; i < now; i++) drawCard(state, who);
+      if (next > 0) {
+        if (!state.pendingDraws) state.pendingDraws = [];
+        state.pendingDraws.push({ who, amount: next });
+      }
+      break;
+    }
     case 'buff': {
       const { atk, hp } = effect.value;
       if (effect.target === 'friendly_minion' && targetInfo?.type === 'minion') { const m = side.board.find(m => m.uid === targetInfo.uid); if (m) { m.atk += atk; m.hp += hp; m.maxHp += hp; } }
@@ -150,6 +175,43 @@ function applyEffect(state, who, effect, targetInfo, src) {
     case 'manaLock': {
       if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
       state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      break;
+    }
+    case 'drawRandom': {
+      const n = effect.min + Math.floor(Math.random() * (effect.max - effect.min + 1));
+      for (let i = 0; i < n; i++) drawCard(state, who);
+      break;
+    }
+    case 'dealDamageBothHeroes': {
+      const v = effect.value;
+      side.hp -= v; opp.hp -= v;
+      cleanDead(state); checkWin(state);
+      break;
+    }
+    case 'dealDamageAndDraw': {
+      const { damage, draw } = effect;
+      if (effect.target === 'enemy_any') {
+        if (targetInfo && targetInfo.type === 'minion') { const m = opp.board.find(m => m.uid === targetInfo.uid); if (m) m.hp -= damage; }
+        else opp.hp -= damage;
+      }
+      for (let i = 0; i < draw; i++) drawCard(state, who);
+      cleanDead(state);
+      break;
+    }
+    case 'skipOpponentTurn': {
+      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
+      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      break;
+    }
+    case 'dealDamageAll': {
+      const v = effect.value;
+      side.board.forEach(m => { m.hp -= v; }); opp.board.forEach(m => { m.hp -= v; });
+      side.hp -= v; opp.hp -= v;
+      cleanDead(state); checkWin(state);
+      break;
+    }
+    case 'freeCardsThisTurn': {
+      state.freeCardsThisTurn = who;
       break;
     }
   }
@@ -187,7 +249,7 @@ function createPvpState(p1Cards, p2Cards, p1Arts, p2Arts) {
     enemy:  { hp: STARTING_HP, maxHp: STARTING_HP, mana: 0, maxMana: 0, deck: shuffle([...p2Cards].map(c => ({ ...c }))), hand: [], board: [], fatigue: 0, artifacts: p2Arts || [] },
     origDecks: { player: [...p1Cards], enemy: [...p2Cards] },
     cardById,
-    turn: 0, currentTurn: 'player', phase: 'playing', winner: null, log: []
+    turn: 0, currentTurn: 'player', phase: 'playing', winner: null, log: [], pendingDraws: []
   };
   /* ARTIFACTS DISABLED
   if (state.player.artifacts.includes('mana_crystal')) { state.player.maxMana = 1; state.player.mana = 1; }

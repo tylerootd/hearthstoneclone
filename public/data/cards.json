@@ -45,5 +45,18 @@
   { "id": "base_cursed_berserker", "name": "Cursed Berserker", "type": "minion", "cost": 0, "atk": 300, "hp": 300, "sprite": "shadow_fighter.png", "triggers": [
     { "when": "turn_start", "effect": { "kind": "dealDamage", "target": "friendly_hero", "value": 300 } },
     { "when": "turn_end", "effect": { "kind": "dealDamage", "target": "friendly_hero", "value": 300 } }
-  ]}
+  ]},
+  { "id": "bd2_cool_stick", "name": "Cool Stick", "type": "spell", "cost": 1, "sprite": "base_deck_2/cool stick.jpg", "effect": { "kind": "dealDamage", "target": "enemy_any", "value": 300 } },
+  { "id": "bd2_cardboard_box", "name": "Cardboard Box", "type": "minion", "cost": 2, "atk": 0, "hp": 500, "sprite": "base_deck_2/cardboard box.jpg", "keywords": ["guardian"] },
+  { "id": "bd2_loose_change", "name": "Loose Change", "type": "spell", "cost": 3, "sprite": "base_deck_2/loose change.jpg", "effect": { "kind": "drawRandom", "min": 1, "max": 4 } },
+  { "id": "bd2_beg", "name": "Beg", "type": "spell", "cost": 0, "sprite": "base_deck_2/beg.jpg", "effect": { "kind": "drawOverTurns", "value": 2 } },
+  { "id": "bd2_big_rat", "name": "Big Rat", "type": "minion", "cost": 1, "atk": 100, "hp": 300, "sprite": "base_deck_2/big rat.jpg" },
+  { "id": "bd2_stray_dog", "name": "Stray Dog", "type": "minion", "cost": 3, "atk": 400, "hp": 100, "sprite": "base_deck_2/stray dog.jpg", "keywords": ["rage"] },
+  { "id": "bd2_morning_breath", "name": "Morning Breath", "type": "spell", "cost": 4, "sprite": "base_deck_2/morning breath.jpg", "effect": { "kind": "dealDamageBothHeroes", "value": 700 } },
+  { "id": "bd2_dumpster_fire", "name": "Dumpster Fire", "type": "spell", "cost": 2, "sprite": "base_deck_2/dumpster fire.jpg", "effect": { "kind": "dealDamageAndDraw", "target": "enemy_any", "damage": 300, "draw": 1 } },
+  { "id": "bd2_shelter", "name": "Shelter", "type": "spell", "cost": 2, "sprite": "base_deck_2/shelter.gif", "gif": "base_deck_2/shelter.gif", "effect": { "kind": "heal", "target": "friendly_hero", "value": 1000 } },
+  { "id": "bd2_new_shoes", "name": "New Shoes", "type": "spell", "cost": 4, "sprite": "base_deck_2/new shoes.gif", "gif": "base_deck_2/new shoes.gif", "effect": { "kind": "newShoes", "skipEffect": { "kind": "skipOpponentTurn" }, "equipEffect": { "kind": "transformMinion", "transformTo": "bd2_lady_luck_with_shoes", "requireId": "bd2_lady_luck" } } },
+  { "id": "bd2_plague", "name": "Plague", "type": "spell", "cost": 5, "sprite": "base_deck_2/plague.gif", "gif": "base_deck_2/plague.gif", "effect": { "kind": "dealDamageAll", "value": 300 } },
+  { "id": "bd2_lady_luck", "name": "Lady Luck", "type": "minion", "cost": 7, "atk": 500, "hp": 800, "sprite": "base_deck_2/lady_luck.gif", "gif": "base_deck_2/lady_luck.gif", "keywords": ["guardian"], "effect": { "kind": "freeCardsThisTurn" } },
+  { "id": "bd2_lady_luck_with_shoes", "name": "Lady Luck with Shoes", "type": "minion", "cost": 7, "atk": 750, "hp": 1600, "sprite": "base_deck_2/ladylucksneakerfusion.gif", "gif": "base_deck_2/ladylucksneakerfusion.gif", "keywords": ["guardian", "rage", "attacksTwice"], "effect": { "kind": "freeCardsThisTurn" } }
 ]

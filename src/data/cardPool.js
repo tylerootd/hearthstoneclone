@@ -5,21 +5,23 @@ let merged = [];
 let spriteList = [];
 let npcList = [];
 let baseDeck1Cards = null;
+let baseDeck2Cards = null;
 
 export async function initCardPool() {
-  const [cardsRes, spritesRes, npcsRes, deckRes] = await Promise.all([
+  const [cardsRes, spritesRes, npcsRes, deck1Res, deck2Res] = await Promise.all([
     fetch('./data/cards.json'),
     fetch('./data/sprites.json'),
     fetch('./data/npcs.json'),
-    fetch('./assets/Base%20deck%201/deck.json').catch(() => null)
+    fetch('./assets/Base%20deck%201/deck.json').catch(() => null),
+    fetch('./assets/Base%20deck%202/deck.json').catch(() => null)
   ]);
   baseCards = await cardsRes.json();
   spriteList = await spritesRes.json();
   npcList = await npcsRes.json();
-  const deck1 = deckRes && deckRes.ok ? await deckRes.json() : null;
-  if (deck1 && deck1.cards && deck1.cards.length) {
-    baseDeck1Cards = deck1.cards;
-  }
+  const deck1 = deck1Res && deck1Res.ok ? await deck1Res.json() : null;
+  const deck2 = deck2Res && deck2Res.ok ? await deck2Res.json() : null;
+  if (deck1 && deck1.cards && deck1.cards.length) baseDeck1Cards = deck1.cards;
+  if (deck2 && deck2.cards && deck2.cards.length) baseDeck2Cards = deck2.cards;
   rebuildPool();
 }
 
@@ -50,14 +52,27 @@ export function getStarterCollection() {
   ];
 }
 
+export function getStarterCollection2() {
+  const deck = getStarterDeck2();
+  return [...new Set(deck)];
+}
+
 export function getStarterDeck() {
-  if (baseDeck1Cards && baseDeck1Cards.length) {
-    return [...baseDeck1Cards];
-  }
+  if (baseDeck1Cards && baseDeck1Cards.length) return [...baseDeck1Cards];
   return [
     'bd1_potato', 'bd1_potato', 'bd1_chicken', 'bd1_chicken', 'bd1_sheep', 'bd1_sheep',
     'bd1_guard_dog', 'bd1_guard_dog', 'bd1_scarecrow', 'bd1_scarecrow', 'bd1_ox', 'bd1_ox',
     'bd1_harvest_season', 'bd1_harvest_season', 'bd1_farmers_pitchfork', 'bd1_farmers_pitchfork',
     'bd1_old_macdonald', 'bd1_world_tree_apple', 'bd1_big_green_tractor', 'bd1_drought'
+  ];
+}
+
+export function getStarterDeck2() {
+  if (baseDeck2Cards && baseDeck2Cards.length) return [...baseDeck2Cards];
+  return [
+    'bd2_cool_stick', 'bd2_cool_stick', 'bd2_cardboard_box', 'bd2_cardboard_box', 'bd2_beg', 'bd2_beg',
+    'bd2_big_rat', 'bd2_big_rat', 'bd2_stray_dog', 'bd2_stray_dog', 'bd2_loose_change', 'bd2_loose_change',
+    'bd2_dumpster_fire', 'bd2_dumpster_fire', 'bd2_morning_breath', 'bd2_morning_breath',
+    'bd2_shelter', 'bd2_new_shoes', 'bd2_plague', 'bd2_lady_luck'
   ];
 }

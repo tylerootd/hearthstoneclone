@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { loadCollection, saveCollection, loadDeck, saveDeck, loadCustomCards, loadDeckSlots, saveDeckSlots } from '../data/storage.js';
-import { getCardById, getAllCards, getBaseCards, getStarterCollection } from '../data/cardPool.js';
+import { getCardById, getAllCards, getBaseCards, getStarterCollection, getStarterCollection2, getStarterDeck, getStarterDeck2 } from '../data/cardPool.js';
 import { getCardTextureKey } from '../utils/cardSprite.js';
 
 const W = 1024, H = 768;
+const SIDEBAR_W = 140;
 const COLS = 5;
 const CARD_W = 120, CARD_H = 90, GAP = 6;
 const FONT = { fontFamily: '"Press Start 2P", monospace, Arial', fontSize: '10px' };
@@ -19,15 +20,17 @@ export default class DeckBuilderScene extends Phaser.Scene {
     this.customIds = new Set(loadCustomCards().map(c => c.id));
     this.scrollOffset = 0;
     this.slotsOpen = false;
+    this.selectedBaseDeck = 1;
     this.uiGroup = this.add.group();
     this.redraw();
   }
 
   syncCollection() {
-    const allowedIds = getStarterCollection();
+    const deck1Ids = getStarterCollection();
+    const deck2Ids = getStarterCollection2();
     const colSet = new Set(this.collectionIds);
     let changed = false;
-    for (const id of allowedIds) {
+    for (const id of [...deck1Ids, ...deck2Ids]) {
       if (!colSet.has(id)) {
         this.collectionIds.push(id);
         colSet.add(id);
@@ -37,17 +40,76 @@ export default class DeckBuilderScene extends Phaser.Scene {
     if (changed) saveCollection(this.collectionIds);
   }
 
+  drawSidebar() {
+    const cx = SIDEBAR_W / 2;
+    this.uiGroup.add(this.add.rectangle(cx, H / 2, SIDEBAR_W, H, 0x0d0d18));
+    this.uiGroup.add(this.add.rectangle(cx, H / 2, SIDEBAR_W, H, 0x000000, 0).setStrokeStyle(1, 0x223344));
+
+    this.uiGroup.add(this.add.text(cx, 28, 'BASE DECK', {
+      ...FONT, fontSize: '8px', color: '#e6b422'
+    }).setOrigin(0.5));
+
+    const deck1Selected = this.selectedBaseDeck === 1;
+    const deck1Bg = this.add.rectangle(cx, 70, SIDEBAR_W - 20, 36, deck1Selected ? 0x2a3344 : 0x1a1a2a)
+      .setInteractive({ useHandCursor: true });
+    deck1Bg.setStrokeStyle(2, deck1Selected ? 0x66aaff : 0x333344);
+    this.uiGroup.add(deck1Bg);
+    this.uiGroup.add(this.add.text(cx, 70, 'DECK 1', {
+      ...FONT, fontSize: '8px', color: deck1Selected ? '#fff' : '#888'
+    }).setOrigin(0.5));
+    deck1Bg.on('pointerover', () => { if (!deck1Selected) deck1Bg.setStrokeStyle(2, 0x556688); });
+    deck1Bg.on('pointerout', () => { if (!deck1Selected) deck1Bg.setStrokeStyle(2, 0x333344); });
+    deck1Bg.on('pointerdown', () => {
+      this.selectedBaseDeck = 1;
+      this.scrollOffset = 0;
+      this.redraw();
+    });
+
+    const deck2Selected = this.selectedBaseDeck === 2;
+    const deck2Bg = this.add.rectangle(cx, 115, SIDEBAR_W - 20, 36, deck2Selected ? 0x2a3344 : 0x1a1a2a)
+      .setInteractive({ useHandCursor: true });
+    deck2Bg.setStrokeStyle(2, deck2Selected ? 0x66aaff : 0x333344);
+    this.uiGroup.add(deck2Bg);
+    this.uiGroup.add(this.add.text(cx, 115, 'DECK 2', {
+      ...FONT, fontSize: '8px', color: deck2Selected ? '#fff' : '#888'
+    }).setOrigin(0.5));
+    deck2Bg.on('pointerover', () => { if (!deck2Selected) deck2Bg.setStrokeStyle(2, 0x556688); });
+    deck2Bg.on('pointerout', () => { if (!deck2Selected) deck2Bg.setStrokeStyle(2, 0x333344); });
+    deck2Bg.on('pointerdown', () => {
+      this.selectedBaseDeck = 2;
+      this.scrollOffset = 0;
+      this.redraw();
+    });
+
+    const loadBg = this.add.rectangle(cx, 165, SIDEBAR_W - 20, 30, 0x224422)
+      .setInteractive({ useHandCursor: true });
+    loadBg.setStrokeStyle(1, 0x44aa44);
+    this.uiGroup.add(loadBg);
+    this.uiGroup.add(this.add.text(cx, 165, 'LOAD DECK', {
+      ...FONT, fontSize: '6px', color: '#88ff88'
+    }).setOrigin(0.5));
+    loadBg.on('pointerover', () => loadBg.setFillStyle(0x336633));
+    loadBg.on('pointerout', () => loadBg.setFillStyle(0x224422));
+    loadBg.on('pointerdown', () => {
+      this.deckIds = this.selectedBaseDeck === 1 ? [...getStarterDeck()] : [...getStarterDeck2()];
+      this.redraw();
+    });
+  }
+
   redraw() {
     this.uiGroup.clear(true, true);
 
-    this.uiGroup.add(this.add.text(330, 18, 'DECK BUILDER', {
+    this.drawSidebar();
+
+    const mainX = SIDEBAR_W;
+    const contentCenterX = mainX + (870 - mainX) / 2;
+
+    this.uiGroup.add(this.add.text(contentCenterX, 18, 'DECK BUILDER', {
       ...FONT, fontSize: '20px', color: '#e6b422'
     }).setOrigin(0.5));
-    this.uiGroup.add(this.add.text(330, 42, 'Click to add to deck', { ...FONT, fontSize: '8px', color: '#888' }).setOrigin(0.5));
+    this.uiGroup.add(this.add.text(contentCenterX, 42, 'Click to add to deck', { ...FONT, fontSize: '8px', color: '#888' }).setOrigin(0.5));
 
-    const countMap = {};
-    this.collectionIds.forEach(id => { countMap[id] = (countMap[id] || 0) + 1; });
-    const allowedSet = new Set(getStarterCollection());
+    const allowedSet = new Set(this.selectedBaseDeck === 1 ? getStarterCollection() : getStarterCollection2());
     const uniqueIds = [...new Set(this.collectionIds)].filter(id => allowedSet.has(id));
 
     const visibleRows = 7;
@@ -57,7 +119,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
       const card = getCardById(id);
       if (!card) return;
       const col = i % COLS, row = Math.floor(i / COLS);
-      const x = 16 + col * (CARD_W + GAP) + CARD_W / 2;
+      const x = mainX + 16 + col * (CARD_W + GAP) + CARD_W / 2;
       const y = 60 + row * (CARD_H + GAP) + CARD_H / 2;
 
       const inDeckCount = this.deckIds.filter(d => d === id).length;
@@ -105,14 +167,14 @@ export default class DeckBuilderScene extends Phaser.Scene {
     });
 
     if (this.scrollOffset > 0) {
-      const up = this.add.text(330, 56, '[ SCROLL UP ]', {
+      const up = this.add.text(contentCenterX, 56, '[ SCROLL UP ]', {
         ...FONT, fontSize: '8px', color: '#66aaff'
       }).setOrigin(0.5).setInteractive({ useHandCursor: true });
       up.on('pointerdown', () => { this.scrollOffset = Math.max(0, this.scrollOffset - COLS); this.redraw(); });
       this.uiGroup.add(up);
     }
     if (this.scrollOffset + visibleRows * COLS < uniqueIds.length) {
-      const dn = this.add.text(330, H - 70, '[ SCROLL DOWN ]', {
+      const dn = this.add.text(contentCenterX, H - 70, '[ SCROLL DOWN ]', {
         ...FONT, fontSize: '8px', color: '#66aaff'
       }).setOrigin(0.5).setInteractive({ useHandCursor: true });
       dn.on('pointerdown', () => { this.scrollOffset += COLS; this.redraw(); });

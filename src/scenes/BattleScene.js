@@ -7,7 +7,7 @@ import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
 import {
   createBattleState, startTurn, endTurnTriggers, canPlayCard, playCard,
   minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck,
-  guardianBlockingHero, hasAnyGuardian,
+  guardianBlockingHero, hasAnyGuardian, hasLadyLuckOnBoard, isNewShoesWithEquipOption,
   ARTIFACT_DEFS, ALL_ARTIFACT_IDS
 } from '../game/battleEngine.js';
 
@@ -48,6 +48,7 @@ export default class BattleScene extends Phaser.Scene {
     this._helpPanel = null;
     this._helpPanelMinimized = false;
     this._handArtMasks = [];
+    this._fallInSlot = null;
 
     const playerDeck = this.battleData.playerDeck || loadDeck() || getStarterDeck();
     const enemyDeck = this.battleData.enemyDeck || generateEnemyDeck();
@@ -451,6 +452,55 @@ export default class BattleScene extends Phaser.Scene {
     return new Set(this.bs.player.board.map(m => m.slot));
   }
 
+  _drawFallingBoardMinion(m, x, yBase) {
+    const card = getCardById(m.id);
+    const tex = card ? getCardTextureKey(this, card) : null;
+    const animKey = card ? getCardAnimKey(this, card) : null;
+    const isGuardian = m.keywords && m.keywords.includes('guardian');
+    const bc = isGuardian ? 0x33ddff : 0x337744;
+    const boardFullH = CARD_H + BAR_H * 2;
+    const barY = -CARD_H / 2 - BAR_H / 2;
+    const hpBarBY = CARD_H / 2 + BAR_H / 2;
+    const artZoneY = ART_ZONE_TOP + ART_ZONE_HEIGHT / 2;
+
+    const container = this.add.container(x, yBase - 220).setDepth(10);
+    this.uiGroup.add(container);
+
+    container.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(isGuardian ? 3 : 2, bc));
+    if (animKey) {
+      const spr = this.add.sprite(0, artZoneY, animKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT);
+      spr.play(animKey);
+      container.add(spr);
+    } else if (tex) {
+      container.add(this.add.rectangle(0, artZoneY, CARD_W, ART_ZONE_HEIGHT, 0xffffff, 1));
+      container.add(this.add.image(0, artZoneY, tex).setDisplaySize(CARD_W, ART_ZONE_HEIGHT));
+    }
+    container.add(this.add.rectangle(0, barY, CARD_W, BAR_H, 0x05050f, 0.95).setStrokeStyle(1, 0xff0077));
+    container.add(this.add.text(0, barY, m.name.slice(0, 12), { ...FONT, fontSize: '7px', color: '#00ffee' }).setOrigin(0.5));
+    container.add(this.add.rectangle(0, hpBarBY, CARD_W, BAR_H, 0x0a0a0a, 0.95).setStrokeStyle(1, 0x224422));
+    const hpPct = Math.max(0, m.hp / m.maxHp);
+    const fillW = (CARD_W - 4) * hpPct;
+    const hpCol = hpPct > 0.5 ? 0x33cc44 : hpPct > 0.25 ? 0xccaa33 : 0xcc3333;
+    if (fillW > 0) container.add(this.add.rectangle(-(CARD_W - 4) / 2 + fillW / 2, hpBarBY, fillW, BAR_H - 4, hpCol, 0.9));
+    container.add(this.add.text(0, hpBarBY, m.hp + ' / ' + m.maxHp, { ...STAT_FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
+    const atkBarY = -CARD_H / 2 + BAR_H / 2;
+    container.add(this.add.rectangle(0, atkBarY, CARD_W, BAR_H, 0x3d2800, 0.95).setStrokeStyle(1, 0xddaa22));
+    container.add(this.add.text(0, atkBarY, '' + m.atk, { ...STAT_FONT, fontSize: '11px', color: '#ffe066' }).setOrigin(0.5));
+    if (isGuardian) container.add(this.add.text(0, -6, '\u{1F6E1}', { fontSize: '22px' }).setOrigin(0.5));
+    if (m.keywords?.includes('rage')) container.add(this.add.text(0, 10, 'RAGE', { ...FONT, fontSize: '5px', color: '#ff6622' }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: container,
+      y: yBase,
+      duration: 480,
+      ease: 'Bounce.easeOut',
+      onComplete: () => {
+        this._fallInSlot = null;
+        this.refresh();
+      }
+    });
+  }
+
   /* ═══════ HERO PANEL ═══════ */
   _heroPanel(x, y, side, label, isEnemy) {
     const pw = 240, ph = 54;
@@ -503,6 +553,10 @@ export default class BattleScene extends Phaser.Scene {
   _boardRow(board, yBase, isPlayer) {
     board.forEach((m) => {
       const x = SLOT_X(m.slot != null && m.slot >= 0 ? m.slot : 0), y = yBase;
+      if (isPlayer && this._fallInSlot === m.slot && m.id === 'bd2_lady_luck_with_shoes') {
+        this._drawFallingBoardMinion(m, x, yBase);
+        return;
+      }
       const card = getCardById(m.id);
       const tex = card ? getCardTextureKey(this, card) : null;
       const isGuardian = m.keywords && m.keywords.includes('guardian');
@@ -689,7 +743,9 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (this.targetMode && !isPlayer) {
         const guardiansExist = hasAnyGuardian(this.bs.enemy.board);
-        const canTarget = !guardiansExist || isGuardian;
+        const canTarget = this.selecting?.type === 'attack'
+          ? (!guardiansExist || isGuardian)
+          : true;
         if (canTarget) {
           fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
           fr.on('pointerover', () => { showBoardGlow(0xff4444); if (this.selecting?.type === 'attack') this._showDmgPreview(m, x, y, false); });
@@ -697,6 +753,8 @@ export default class BattleScene extends Phaser.Scene {
         }
       }
       if (this.targetMode && isPlayer && this.selecting?.needsFriendly) {
+        const reqId = this.selecting?.requireMinionId;
+        if (reqId && m.id !== reqId) return;
         fr.on('pointerdown', () => this._onTarget({ type: 'minion', uid: m.uid }));
         fr.on('pointerover', () => showBoardGlow(0x4499ff));
         fr.on('pointerout', () => hideBoardGlow());
@@ -1328,6 +1386,15 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   _playSpell(idx, card, ox, oy) {
+    if (isNewShoesWithEquipOption(card)) {
+      if (hasLadyLuckOnBoard(this.bs, 'player')) {
+        this._showNewShoesChoice(idx, card, ox, oy);
+      } else {
+        playCard(this.bs, 'player', idx, null);
+        this.refresh();
+      }
+      return;
+    }
     if (needsTarget(card)) {
       this.selecting = {
         type: 'play', handIndex: idx, card,
@@ -1340,6 +1407,39 @@ export default class BattleScene extends Phaser.Scene {
       playCard(this.bs, 'player', idx, null);
       this.refresh();
     }
+  }
+
+  _showNewShoesChoice(idx, card, ox, oy) {
+    const container = this.add.container(0, 0);
+    container.setDepth(200);
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.7).setInteractive();
+    const panel = this.add.rectangle(W / 2, H / 2, 420, 180, 0x1a1a2a).setStrokeStyle(2, 0x4466aa);
+    const titleTxt = this.add.text(W / 2, H / 2 - 60, 'NEW SHOES', { ...FONT, fontSize: '14px', color: '#e6b422' }).setOrigin(0.5);
+    const subTxt = this.add.text(W / 2, H / 2 - 32, 'Choose an effect:', { ...FONT, fontSize: '8px', color: '#aaa' }).setOrigin(0.5);
+    const skipBtn = this.add.rectangle(W / 2 - 95, H / 2 + 25, 160, 36, 0x224422).setInteractive({ useHandCursor: true });
+    skipBtn.setStrokeStyle(1, 0x44aa44);
+    const skipTxt = this.add.text(W / 2 - 95, H / 2 + 25, 'SKIP OPPONENT TURN', { ...FONT, fontSize: '6px', color: '#88ff88' }).setOrigin(0.5);
+    const equipBtn = this.add.rectangle(W / 2 + 95, H / 2 + 25, 160, 36, 0x222244).setInteractive({ useHandCursor: true });
+    equipBtn.setStrokeStyle(1, 0x4466aa);
+    const equipTxt = this.add.text(W / 2 + 95, H / 2 + 25, 'EQUIP ONTO LADY LUCK', { ...FONT, fontSize: '6px', color: '#88ccff' }).setOrigin(0.5);
+    container.add([overlay, panel, titleTxt, subTxt, skipBtn, skipTxt, equipBtn, equipTxt]);
+
+    skipBtn.on('pointerdown', () => {
+      container.destroy();
+      playCard(this.bs, 'player', idx, null);
+      this.refresh();
+    });
+    equipBtn.on('pointerdown', () => {
+      container.destroy();
+      this.selecting = {
+        type: 'play', handIndex: idx, card,
+        needsFriendly: true,
+        requireMinionId: 'bd2_lady_luck'
+      };
+      this._selOrigin = { x: ox, y: oy };
+      this.targetMode = true;
+      this.refresh();
+    });
   }
 
   /* ═══════ POSITION SLOTS (7 card-sized, click to place) ═══════ */
@@ -1394,6 +1494,56 @@ export default class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 500, onComplete: () => t.destroy() });
   }
 
+  _playNewShoesEquipAnimation(targetMinion) {
+    const { handIndex, card } = this.selecting;
+    const ox = this._selOrigin?.x ?? W / 2;
+    const oy = this._selOrigin?.y ?? HAND_Y;
+    const tx = SLOT_X(targetMinion.slot);
+    const ty = BOARD_Y.player;
+
+    this.arrowGfx.clear();
+    this.targetMode = false;
+    this.selecting = null;
+    this._selOrigin = null;
+    this.refresh();
+
+    const flyCard = this.add.container(ox, oy).setDepth(150);
+    const cardBg = this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.98).setStrokeStyle(2, 0x4466aa);
+    flyCard.add(cardBg);
+    const texKey = getCardTextureKey(this, card);
+    if (texKey) {
+      flyCard.add(this.add.image(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, texKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT));
+    }
+    flyCard.add(this.add.text(0, -CARD_H / 2 + 10, 'NEW SHOES', { ...FONT, fontSize: '6px', color: '#4466aa' }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: flyCard,
+      x: tx,
+      y: ty,
+      duration: 320,
+      ease: 'Power2.In',
+      onComplete: () => {
+        const flash = this.add.rectangle(tx, ty, CARD_W + 20, CARD_H + 40, 0xffdd66, 0.6)
+          .setDepth(155).setStrokeStyle(3, 0xffcc00);
+        this.tweens.add({
+          targets: flash,
+          alpha: 0,
+          scale: 1.4,
+          duration: 220,
+          ease: 'Power2.Out',
+          onComplete: () => { flash.destroy(); }
+        });
+        flyCard.destroy();
+        this.cameras.main.shake(40, 0.003);
+        this.time.delayedCall(100, () => {
+          playCard(this.bs, 'player', handIndex, { type: 'minion', uid: targetMinion.uid }, null);
+          this._fallInSlot = targetMinion.slot;
+          this.refresh();
+        });
+      }
+    });
+  }
+
   _banner(text) {
     const bg = this.add.rectangle(W / 2, 278, 280, 44, 0x000000, 0.88).setDepth(300).setScale(0, 1);
     const tx = this.add.text(W / 2, 278, text, {
@@ -1417,6 +1567,16 @@ export default class BattleScene extends Phaser.Scene {
   _onTarget(info) {
     if (!this.selecting) return;
     if (this.selecting.type === 'play') {
+      const isNewShoesEquip = this.selecting.card?.effect?.equipEffect?.kind === 'transformMinion' &&
+        this.selecting.requireMinionId === 'bd2_lady_luck' &&
+        info?.type === 'minion';
+      if (isNewShoesEquip) {
+        const targetMinion = this.bs.player.board.find(m => m.uid === info.uid);
+        if (targetMinion) {
+          this._playNewShoesEquipAnimation(targetMinion);
+          return;
+        }
+      }
       playCard(this.bs, 'player', this.selecting.handIndex, info, this.selecting.boardPos);
       this.targetMode = false;
       this.selecting = null;

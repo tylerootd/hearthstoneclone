@@ -41,6 +41,8 @@ function shuffle(arr) {
 }
 
 function makeMinion(card) {
+  const keywords = card.keywords ? [...card.keywords] : [];
+  const maxAttacksPerTurn = keywords.includes('attacksTwice') ? 2 : 1;
   return {
     uid: crypto.randomUUID(),
     id: card.id,
@@ -51,9 +53,10 @@ function makeMinion(card) {
     maxHp: card.hp,
     effect: card.effect || null,
     triggers: card.triggers || [],
-    keywords: card.keywords ? [...card.keywords] : [],
+    keywords,
     canAttack: false,
-    attackedThisTurn: false,
+    attackedThisTurn: 0,
+    maxAttacksPerTurn,
     slot: -1
   };
 }
@@ -104,7 +107,8 @@ export function createBattleState(playerDeckIds, enemyDeckIds, playerArtifacts =
     phase: 'playing',
     winner: null,
     log: [],
-    playerLevel
+    playerLevel,
+    pendingDraws: []
   };
 
   /* ARTIFACTS DISABLED
@@ -153,11 +157,13 @@ export function startTurn(state, who) {
   } else {
     side.mana = side.maxMana;
   }
+  if (state.freeCardsThisTurn) state.freeCardsThisTurn = null;
 
   side.board.forEach(m => { m.canAttack = true; m.attackedThisTurn = false; });
 
   drawCard(state, who);
   processTriggers(state, who, 'turn_start');
+  processPendingDraws(state, who);
 }
 
 export function endTurnTriggers(state, who) {
@@ -178,6 +184,17 @@ function processArtifactTriggers(state, who) {
   }
 }
 
+function processPendingDraws(state, who) {
+  if (!state.pendingDraws || state.pendingDraws.length === 0) return;
+  const toProcess = state.pendingDraws.filter(p => p.who === who);
+  state.pendingDraws = state.pendingDraws.filter(p => p.who !== who);
+  for (const p of toProcess) {
+    for (let i = 0; i < p.amount; i++) drawCard(state, who);
+    if (p.amount > 0) state.log.push(`  Draws ${p.amount} card(s) (delayed)`);
+  }
+  checkWin(state);
+}
+
 function processTriggers(state, who, timing) {
   const side = state[who];
   for (const minion of [...side.board]) {
@@ -195,7 +212,8 @@ export function canPlayCard(state, who, handIndex) {
   const side = state[who];
   const card = side.hand[handIndex];
   if (!card) return false;
-  if (card.cost > side.mana) return false;
+  const effectiveCost = state.freeCardsThisTurn === who ? 0 : card.cost;
+  if (effectiveCost > side.mana) return false;
   if (card.type === 'minion' && side.board.length >= MAX_BOARD) return false;
   return true;
 }
@@ -205,9 +223,10 @@ export function playCard(state, who, handIndex, targetInfo, boardPos) {
   const opp  = who === 'player' ? state.enemy : state.player;
   const card = side.hand[handIndex];
   if (!card) return false;
-  if (card.cost > side.mana) return false;
+  const effectiveCost = state.freeCardsThisTurn === who ? 0 : card.cost;
+  if (effectiveCost > side.mana) return false;
 
-  side.mana -= card.cost;
+  side.mana -= effectiveCost;
   side.hand.splice(handIndex, 1);
   state.log.push(`${who} plays ${card.name} (${card.cost} mana)`);
 
@@ -233,7 +252,16 @@ export function playCard(state, who, handIndex, targetInfo, boardPos) {
     }
     if (card.effect) applyEffect(state, who, card.effect, targetInfo, minion);
   } else if (card.type === 'spell') {
-    if (card.effect) applyEffect(state, who, card.effect, targetInfo, null);
+    if (card.effect) {
+      if (card.effect.kind === 'newShoes') {
+        const subEffect = (targetInfo && targetInfo.type === 'minion')
+          ? card.effect.equipEffect
+          : card.effect.skipEffect;
+        if (subEffect) applyEffect(state, who, subEffect, targetInfo, null);
+      } else {
+        applyEffect(state, who, card.effect, targetInfo, null);
+      }
+    }
   }
 
   checkWin(state);
@@ -279,6 +307,19 @@ function applyEffect(state, who, effect, targetInfo, sourceMinion) {
     case 'draw': {
       for (let i = 0; i < effect.value; i++) drawCard(state, who);
       state.log.push(`  Draws ${effect.value} card(s)`);
+      break;
+    }
+    case 'drawOverTurns': {
+      const total = effect.value || 2;
+      const now = Math.min(1, total);
+      const next = total - now;
+      for (let i = 0; i < now; i++) drawCard(state, who);
+      if (now > 0) state.log.push(`  Draws ${now} card(s)`);
+      if (next > 0) {
+        if (!state.pendingDraws) state.pendingDraws = [];
+        state.pendingDraws.push({ who, amount: next });
+        state.log.push(`  Will draw ${next} card(s) at start of next turn`);
+      }
       break;
     }
     case 'buff': {
@@ -332,6 +373,77 @@ function applyEffect(state, who, effect, targetInfo, sourceMinion) {
       state.log.push(`  Opponent cannot spend mana next turn!`);
       break;
     }
+    case 'drawRandom': {
+      const n = effect.min + Math.floor(Math.random() * (effect.max - effect.min + 1));
+      for (let i = 0; i < n; i++) drawCard(state, who);
+      state.log.push(`  Draws ${n} card(s) (random 1-4)`);
+      break;
+    }
+    case 'dealDamageBothHeroes': {
+      const val = effect.value;
+      side.hp -= val;
+      opp.hp -= val;
+      state.log.push(`  Deals ${val} to both heroes!`);
+      cleanDead(state);
+      checkWin(state);
+      break;
+    }
+    case 'dealDamageAndDraw': {
+      const { damage, draw } = effect;
+      if (effect.target === 'enemy_any') {
+        if (targetInfo && targetInfo.type === 'minion') {
+          const m = opp.board.find(m => m.uid === targetInfo.uid);
+          if (m) { m.hp -= damage; }
+        } else { opp.hp -= damage; }
+      }
+      for (let i = 0; i < draw; i++) drawCard(state, who);
+      state.log.push(`  Deals ${damage} damage, draws ${draw} card(s)`);
+      cleanDead(state);
+      break;
+    }
+    case 'skipOpponentTurn': {
+      if (!state.manaLockNextTurn) state.manaLockNextTurn = {};
+      state.manaLockNextTurn[who === 'player' ? 'enemy' : 'player'] = true;
+      state.log.push(`  Opponent skips their next turn!`);
+      break;
+    }
+    case 'dealDamageAll': {
+      const val = effect.value;
+      side.board.forEach(m => { m.hp -= val; });
+      opp.board.forEach(m => { m.hp -= val; });
+      side.hp -= val;
+      opp.hp -= val;
+      state.log.push(`  Deals ${val} to all minions and both heroes!`);
+      cleanDead(state);
+      checkWin(state);
+      break;
+    }
+    case 'freeCardsThisTurn': {
+      state.freeCardsThisTurn = who;
+      state.log.push(`  All your cards cost 0 this turn!`);
+      break;
+    }
+    case 'transformMinion': {
+      if (targetInfo && targetInfo.type === 'minion') {
+        const idx = side.board.findIndex(m => m.uid === targetInfo.uid);
+        if (idx !== -1) {
+          const old = side.board[idx];
+          const reqId = effect.requireId;
+          if (!reqId || old.id === reqId) {
+            const newCard = getCardById(effect.transformTo);
+            if (newCard && newCard.type === 'minion') {
+              const newMinion = makeMinion(newCard);
+              newMinion.slot = old.slot;
+              newMinion.canAttack = newMinion.keywords.includes('rage');
+              newMinion.attackedThisTurn = 0;
+              side.board[idx] = newMinion;
+              state.log.push(`  ${old.name} transforms into ${newMinion.name}!`);
+            }
+          }
+        }
+      }
+      break;
+    }
   }
 }
 
@@ -363,8 +475,8 @@ export function minionAttack(state, who, attackerUid, targetInfo) {
     cleanDead(state);
   }
 
-  attacker.canAttack = false;
-  attacker.attackedThisTurn = true;
+  attacker.attackedThisTurn = (attacker.attackedThisTurn || 0) + 1;
+  attacker.canAttack = attacker.attackedThisTurn < (attacker.maxAttacksPerTurn || 1);
   checkWin(state);
   return true;
 }
@@ -390,8 +502,19 @@ function checkWin(state) {
 
 export function needsTarget(card) {
   if (!card.effect) return false;
+  if (card.effect.kind === 'newShoes') return false;
   const t = card.effect.target;
   return t === 'enemy_any' || t === 'friendly_minion';
+}
+
+export function hasLadyLuckOnBoard(state, who) {
+  const side = state[who] || (who === 'player' ? state.you : state.opponent);
+  if (!side || !side.board) return false;
+  return side.board.some(m => m.id === 'bd2_lady_luck');
+}
+
+export function isNewShoesWithEquipOption(card) {
+  return card?.effect?.kind === 'newShoes' && card.effect.equipEffect;
 }
 
 export function runEnemyTurn(state) {
@@ -409,6 +532,13 @@ export function runEnemyTurn(state) {
     let targetInfo = null;
 
     if (card.effect) {
+      if (card.effect.kind === 'newShoes' && card.effect.equipEffect && hasLadyLuckOnBoard(state, 'enemy')) {
+        const ladyLucks = enemy.board.filter(m => m.id === 'bd2_lady_luck');
+        if (ladyLucks.length > 0 && Math.random() < 0.5) {
+          const m = ladyLucks[Math.floor(Math.random() * ladyLucks.length)];
+          targetInfo = { type: 'minion', uid: m.uid };
+        }
+      }
       const t = card.effect.target;
       if (t === 'enemy_any') {
         if (player.board.length > 0 && Math.random() < 0.6) {
@@ -427,10 +557,11 @@ export function runEnemyTurn(state) {
     if (state.phase === 'over') return;
   }
 
-  const attackers = enemy.board.filter(m => m.canAttack && m.atk > 0);
-  for (const attacker of attackers) {
+  for (let safe = 0; safe < 50; safe++) {
+    const attackers = enemy.board.filter(m => m.canAttack && m.atk > 0);
+    if (attackers.length === 0) break;
     if (state.phase === 'over') return;
-
+    const attacker = attackers[Math.floor(Math.random() * attackers.length)];
     const playerGuardians = player.board.filter(m => m.keywords.includes('guardian'));
     if (playerGuardians.length > 0) {
       const target = playerGuardians[Math.floor(Math.random() * playerGuardians.length)];
