@@ -34,19 +34,17 @@ export default class HubScene extends Phaser.Scene {
       { label: 'QUICK BATTLE',  y: 365, cb: () => this.scene.start('DeckSelect') },
       { label: 'DECK BUILDER',  y: 420, cb: () => this.scene.start('DeckBuilder') },
       { label: 'MASTER MODE',   y: 475, cb: () => this.scene.start('MasterMode') },
-      { label: 'FARMER',         y: 530, cb: () => this.scene.start('Farm'), color: '#cc8844' },
-      { label: 'TUTORIAL',      y: 580, cb: () => this.scene.start('Tutorial'), color: '#ffcc44' },
-      { label: 'RESET SAVE',    y: 630, cb: () => { resetSave(); this.scene.start('Boot'); } }
+      { label: 'TUTORIAL',      y: 530, cb: () => this.scene.start('Tutorial'), color: '#ffcc44' },
+      { label: 'RESET SAVE',    y: 580, cb: () => { resetSave(); this.scene.start('Boot'); } }
     ];
 
     btns.forEach(({ label, y, cb, color }) => {
       const isSpecial = !!color;
       const isTutorial = color === '#ffcc44';
-      const isFarmer = color === '#cc8844';
-      const fillBase = isFarmer ? 0x2a1a10 : isTutorial ? 0x2a2210 : isSpecial ? 0x0a2a1a : 0x1a2233;
-      const strokeBase = isFarmer ? 0x664422 : isTutorial ? 0x665522 : isSpecial ? 0x226644 : 0x334466;
-      const hoverFill = isFarmer ? 0x3a2a18 : isTutorial ? 0x3a3220 : isSpecial ? 0x1a3a2a : 0x2a3344;
-      const hoverStroke = isFarmer ? 0xcc8844 : isTutorial ? 0xffcc44 : isSpecial ? 0x44ffaa : 0x5588bb;
+      const fillBase = isTutorial ? 0x2a2210 : isSpecial ? 0x0a2a1a : 0x1a2233;
+      const strokeBase = isTutorial ? 0x665522 : isSpecial ? 0x226644 : 0x334466;
+      const hoverFill = isTutorial ? 0x3a3220 : isSpecial ? 0x1a3a2a : 0x2a3344;
+      const hoverStroke = isTutorial ? 0xffcc44 : isSpecial ? 0x44ffaa : 0x5588bb;
       const txtColor = color || '#aaccee';
       const bg = this.add.rectangle(512, y, 280, 48, fillBase).setInteractive({ useHandCursor: true });
       bg.setStrokeStyle(2, strokeBase);
