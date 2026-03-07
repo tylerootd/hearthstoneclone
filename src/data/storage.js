@@ -34,4 +34,6 @@ export function resetSave() {
   localStorage.removeItem('player_xp');
   localStorage.removeItem('npc_deck_overrides');
   localStorage.removeItem('player_resources');
+  localStorage.removeItem('farm_progress');
+  localStorage.removeItem('farm_completed');
 }

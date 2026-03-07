@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
+import { playSwoosh, playImpact } from '../utils/sfx.js';
 import { buildHelpItemsForCard, getPlaceholderHelpItems } from '../utils/helpText.js';
 import { grantXp } from '../data/progression.js';
 import { loadCollection, saveCollection, loadCustomCards, saveCustomCards } from '../data/storage.js';
@@ -52,6 +53,9 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._opponentHoverGfx = null;
     this._lastSentHover = undefined;
     this._handArtMasks = [];
+    this._fallInSlots = new Set();
+    this._hiddenSlots = new Set();
+    this._fallInCard = null;
 
     this.add.image(W / 2, H / 2, 'battle_board').setDisplaySize(W, H).setDepth(0);
     this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.32).setDepth(1)
@@ -77,7 +81,9 @@ export default class PvpBattleScene extends Phaser.Scene {
         const msg = JSON.parse(event.data);
         if (msg.type === 'pvp_state') {
           if (this.resultShown) return;
+          const oldState = this.state;
           this.state = msg;
+          this._detectAndAnimateDeaths(oldState, msg);
           this._opponentHover = null;
           this.selecting = null;
           this.targetMode = false;
@@ -87,6 +93,7 @@ export default class PvpBattleScene extends Phaser.Scene {
           this.arrowGfx.clear();
           if (msg.skippedYourTurn) this._pvpBanner('YOU SKIP A TURN');
           if (msg.gainedExtraTurn) this._pvpBanner('You gain an extra turn');
+          this._staggerNewMinions(oldState, msg);
           this.redraw();
         }
         if (msg.type === 'pvp_opponent_hover') {
@@ -558,6 +565,11 @@ export default class PvpBattleScene extends Phaser.Scene {
   _boardRow(board, yBase, isPlayer) {
     board.forEach((m) => {
       const x = SLOT_X(m.slot != null && m.slot >= 0 ? m.slot : 0), y = yBase;
+      if (isPlayer && this._hiddenSlots.has(m.slot)) return;
+      if (isPlayer && this._fallInSlots.has(m.slot)) {
+        this._drawFallingBoardMinion(m, x, yBase);
+        return;
+      }
       const card = getCardById(m.id);
       const texKey = m.sprite ? (() => {
         const k = 'sprite_' + m.sprite.replace('.png', '');
@@ -1384,8 +1396,84 @@ export default class PvpBattleScene extends Phaser.Scene {
       this.targetMode = true;
       this.redraw();
     } else {
-      this._send({ type: 'pvp_play_card', handIndex: handIdx, target: null, boardPos });
+      this._playMinionAnimation(handIdx, card, boardPos);
     }
+  }
+
+  _playMinionAnimation(handIdx, card, boardPos) {
+    this._positionMode = false;
+    this._pendingPlay = null;
+    this._fallInSlots.add(boardPos);
+    this._fallInCard = card;
+    this._send({ type: 'pvp_play_card', handIndex: handIdx, target: null, boardPos });
+    this.redraw();
+  }
+
+  _staggerNewMinions(oldState, newState) {
+    if (!oldState) return;
+    const oldYouIds = new Set((oldState.you?.board || []).map(m => m.uid));
+    const newYou = (newState.you?.board || []).filter(m => !oldYouIds.has(m.uid));
+    const alreadyFalling = new Set(this._fallInSlots);
+    const extras = newYou.filter(m => !alreadyFalling.has(m.slot));
+    extras.forEach(m => this._hiddenSlots.add(m.slot));
+    extras.forEach((m, i) => {
+      this.time.delayedCall(500 + i * 350, () => {
+        this._hiddenSlots.delete(m.slot);
+        this._fallInSlots.add(m.slot);
+        const x = SLOT_X(m.slot);
+        this._drawFallingBoardMinion(m, x, BOARD_Y.player);
+      });
+    });
+  }
+
+  _drawFallingBoardMinion(m, x, yBase) {
+    const card = getCardById(m.id) || this._fallInCard;
+    const texKey = card ? getCardTextureKey(this, card) : null;
+    const animKey = card ? getCardAnimKey(this, card) : null;
+    const isGuardian = m.keywords && m.keywords.includes('guardian');
+    const bc = isGuardian ? 0x33ddff : 0x337744;
+    const barY = -CARD_H / 2 - BAR_H / 2;
+    const hpBarBY = CARD_H / 2 + BAR_H / 2;
+    const artZoneY = ART_ZONE_TOP + ART_ZONE_HEIGHT / 2;
+
+    const container = this.add.container(x, yBase - 220).setDepth(10);
+    this.uiGroup.add(container);
+
+    container.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(isGuardian ? 3 : 2, bc));
+    if (animKey) {
+      const spr = this.add.sprite(0, artZoneY, animKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT);
+      spr.play(animKey);
+      container.add(spr);
+    } else if (texKey) {
+      container.add(this.add.rectangle(0, artZoneY, CARD_W, ART_ZONE_HEIGHT, 0xffffff, 1));
+      container.add(this.add.image(0, artZoneY, texKey).setDisplaySize(CARD_W, ART_ZONE_HEIGHT));
+    }
+    container.add(this.add.rectangle(0, barY, CARD_W, BAR_H, 0x05050f, 0.95).setStrokeStyle(1, 0xff0077));
+    container.add(this.add.text(0, barY, m.name.slice(0, 12), { ...FONT, fontSize: '7px', color: '#00ffee' }).setOrigin(0.5));
+    container.add(this.add.rectangle(0, hpBarBY, CARD_W, BAR_H, 0x0a0a0a, 0.95).setStrokeStyle(1, 0x224422));
+    const hpPct = Math.max(0, m.hp / m.maxHp);
+    const fillW = (CARD_W - 4) * hpPct;
+    const hpCol = hpPct > 0.5 ? 0x33cc44 : hpPct > 0.25 ? 0xccaa33 : 0xcc3333;
+    if (fillW > 0) container.add(this.add.rectangle(-(CARD_W - 4) / 2 + fillW / 2, hpBarBY, fillW, BAR_H - 4, hpCol, 0.9));
+    container.add(this.add.text(0, hpBarBY, m.hp + ' / ' + m.maxHp, { ...STAT_FONT, fontSize: '10px', color: '#fff' }).setOrigin(0.5));
+    const atkBarY = -CARD_H / 2 + BAR_H / 2;
+    container.add(this.add.rectangle(0, atkBarY, CARD_W, BAR_H, 0x3d2800, 0.95).setStrokeStyle(1, 0xddaa22));
+    container.add(this.add.text(0, atkBarY, '' + m.atk, { ...STAT_FONT, fontSize: '11px', color: '#ffe066' }).setOrigin(0.5));
+    if (isGuardian) container.add(this.add.text(0, -6, '\u{1F6E1}', { fontSize: '22px' }).setOrigin(0.5));
+    if (m.keywords?.includes('rage')) container.add(this.add.text(0, 10, 'RAGE', { ...FONT, fontSize: '5px', color: '#ff6622' }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: container,
+      y: yBase,
+      duration: 480,
+      ease: 'Bounce.easeOut',
+      onComplete: () => {
+        playImpact();
+        this._fallInSlots.delete(m.slot);
+        if (this._fallInSlots.size === 0) this._fallInCard = null;
+        if (this._fallInSlots.size === 0) this.redraw();
+      }
+    });
   }
 
   _playSpell(idx, card, ox, oy) {
@@ -1483,7 +1571,20 @@ export default class PvpBattleScene extends Phaser.Scene {
         target: info, boardPos: this.selecting.boardPos
       });
     } else if (this.selecting.type === 'attack') {
-      this._send({ type: 'pvp_attack', attackerUid: this.selecting.uid, target: info });
+      const uid = this.selecting.uid;
+      const attacker = this.state?.you?.board?.find(m => m.uid === uid);
+      const dmg = attacker ? attacker.atk : 0;
+      let tx, ty;
+      if (info.type === 'hero') {
+        tx = W / 2; ty = HERO_Y.enemy;
+      } else {
+        const oppBoard = this.state?.opponent?.board || [];
+        const tm = oppBoard.find(m => m.uid === info.uid);
+        tx = tm ? SLOT_X(tm.slot) : W / 2;
+        ty = BOARD_Y.enemy;
+      }
+      this._playAttackAnimation(uid, info, tx, ty, dmg);
+      this._send({ type: 'pvp_attack', attackerUid: uid, target: info });
     }
     this.targetMode = false;
     this.selecting = null;
@@ -1538,11 +1639,116 @@ export default class PvpBattleScene extends Phaser.Scene {
     this._opponentHoverGfx = gfx;
   }
 
+  _playAttackAnimation(attackerUid, target, tx, ty, dmg) {
+    const attacker = this.state?.you?.board?.find(m => m.uid === attackerUid);
+    if (!attacker) return;
+    const ax = SLOT_X(attacker.slot);
+    const ay = BOARD_Y.player;
+    const defender = target.type === 'minion'
+      ? (this.state?.opponent?.board || []).find(m => m.uid === target.uid) : null;
+    const counterDmg = defender ? defender.atk : 0;
+
+    const FLY_S = 40;
+    const flyCard = this.add.container(ax, ay).setDepth(150);
+    flyCard.add(this.add.rectangle(0, 0, FLY_S, FLY_S, 0x3d2800, 0.95).setStrokeStyle(2, 0xddaa22));
+    flyCard.add(this.add.text(0, 0, '\u2694', { fontSize: '18px', fontStyle: 'bold' }).setOrigin(0.5));
+    playSwoosh();
+
+    this.tweens.add({
+      targets: flyCard,
+      x: tx, y: ty,
+      duration: 300,
+      ease: 'Power2.In',
+      onComplete: () => {
+        playImpact();
+        const flash = this.add.rectangle(tx, ty, FLY_S + 16, FLY_S + 16, 0xffdd66, 0.6)
+          .setDepth(155).setStrokeStyle(3, 0xddaa22);
+        this.tweens.add({
+          targets: flash, alpha: 0, scale: 1.4, duration: 280, ease: 'Power2.Out',
+          onComplete: () => { flash.destroy(); }
+        });
+        flyCard.destroy();
+        this.cameras.main.shake(80, 0.006);
+        this._float(tx, ty, `-${dmg}`, '#ff4444');
+
+        if (counterDmg > 0) {
+          this._playCounterAnimation(tx, ty, ax, ay, counterDmg);
+        }
+      }
+    });
+  }
+
+  _playCounterAnimation(fromX, fromY, toX, toY, dmg) {
+    const FLY_S = 40;
+    const flyBack = this.add.container(fromX, fromY).setDepth(150);
+    flyBack.add(this.add.rectangle(0, 0, FLY_S, FLY_S, 0x3d2800, 0.95).setStrokeStyle(2, 0xddaa22));
+    flyBack.add(this.add.text(0, 0, '\u2694', { fontSize: '18px', fontStyle: 'bold' }).setOrigin(0.5));
+    playSwoosh();
+
+    this.tweens.add({
+      targets: flyBack,
+      x: toX, y: toY,
+      duration: 300,
+      ease: 'Power2.In',
+      onComplete: () => {
+        playImpact();
+        const flash = this.add.rectangle(toX, toY, FLY_S + 16, FLY_S + 16, 0xffdd66, 0.6)
+          .setDepth(155).setStrokeStyle(3, 0xddaa22);
+        this.tweens.add({
+          targets: flash, alpha: 0, scale: 1.4, duration: 280, ease: 'Power2.Out',
+          onComplete: () => { flash.destroy(); }
+        });
+        flyBack.destroy();
+        this.cameras.main.shake(60, 0.004);
+        this._float(toX, toY, `-${dmg}`, '#ff4444');
+      }
+    });
+  }
+
   _float(x, y, text, color) {
     const t = this.add.text(x, y, text, {
-      ...FONT, fontSize: '14px', color, stroke: '#000', strokeThickness: 3
+      ...FONT, fontSize: '22px', color, stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(200);
-    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 500, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 50, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+  }
+
+  _detectAndAnimateDeaths(oldState, newState) {
+    if (!oldState) return;
+    const oldYou = oldState.you?.board || [];
+    const oldOpp = oldState.opponent?.board || [];
+    const newYouIds = new Set((newState.you?.board || []).map(m => m.uid));
+    const newOppIds = new Set((newState.opponent?.board || []).map(m => m.uid));
+    for (const m of oldYou) {
+      if (!newYouIds.has(m.uid)) this._playDeathAnimation(SLOT_X(m.slot), BOARD_Y.player, m);
+    }
+    for (const m of oldOpp) {
+      if (!newOppIds.has(m.uid)) this._playDeathAnimation(SLOT_X(m.slot), BOARD_Y.enemy, m);
+    }
+  }
+
+  _playDeathAnimation(x, y, m) {
+    const card = getCardById(m.id);
+    const tex = card ? getCardTextureKey(this, card) : null;
+    const isGuardian = m.keywords && m.keywords.includes('guardian');
+    const bc = isGuardian ? 0x33ddff : 0x774433;
+
+    const ct = this.add.container(x, y).setDepth(150);
+    ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(2, bc));
+    if (tex) {
+      ct.add(this.add.image(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, tex).setDisplaySize(CARD_W, ART_ZONE_HEIGHT));
+    }
+    ct.add(this.add.rectangle(0, -CARD_H / 2 - BAR_H / 2, CARD_W, BAR_H, 0x05050f, 0.95).setStrokeStyle(1, 0xff0077));
+    ct.add(this.add.text(0, -CARD_H / 2 - BAR_H / 2, m.name.slice(0, 12), { ...FONT, fontSize: '7px', color: '#ff4444' }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: ct,
+      y: y + 120,
+      alpha: 0,
+      angle: Phaser.Math.Between(-8, 8),
+      duration: 480,
+      ease: 'Power2.In',
+      onComplete: () => { ct.destroy(); }
+    });
   }
 
   /* ═══════ RETURN ═══════ */

@@ -4,6 +4,7 @@ import { getCardById, getStarterDeck } from '../data/cardPool.js';
 import { buildHelpItemsForCard, getPlaceholderHelpItems } from '../utils/helpText.js';
 import { grantXp, loadProgression } from '../data/progression.js';
 import { getCardTextureKey, getCardAnimKey } from '../utils/cardSprite.js';
+import { playSwoosh, playImpact } from '../utils/sfx.js';
 import {
   createBattleState, startTurn, endTurnTriggers, canPlayCard, playCard,
   minionAttack, runEnemyTurn, needsTarget, generateEnemyDeck,
@@ -49,7 +50,8 @@ export default class BattleScene extends Phaser.Scene {
     this._helpPanel = null;
     this._helpPanelMinimized = false;
     this._handArtMasks = [];
-    this._fallInSlot = null;
+    this._fallInSlots = new Set();
+    this._hiddenSlots = new Set();
 
     const playerDeck = this.battleData.playerDeck || loadDeck() || getStarterDeck();
     const enemyDeck = this.battleData.enemyDeck || generateEnemyDeck();
@@ -501,8 +503,9 @@ export default class BattleScene extends Phaser.Scene {
       duration: 480,
       ease: 'Bounce.easeOut',
       onComplete: () => {
-        this._fallInSlot = null;
-        this.refresh();
+        playImpact();
+        this._fallInSlots.delete(m.slot);
+        if (this._fallInSlots.size === 0) this.refresh();
       }
     });
   }
@@ -559,7 +562,8 @@ export default class BattleScene extends Phaser.Scene {
   _boardRow(board, yBase, isPlayer) {
     board.forEach((m) => {
       const x = SLOT_X(m.slot != null && m.slot >= 0 ? m.slot : 0), y = yBase;
-      if (isPlayer && this._fallInSlot === m.slot && m.id === 'bd2_lady_luck_with_shoes') {
+      if (isPlayer && this._hiddenSlots.has(m.slot)) return;
+      if (isPlayer && this._fallInSlots.has(m.slot)) {
         this._drawFallingBoardMinion(m, x, yBase);
         return;
       }
@@ -1386,9 +1390,30 @@ export default class BattleScene extends Phaser.Scene {
       this.targetMode = true;
       this.refresh();
     } else {
-      playCard(this.bs, 'player', handIdx, null, boardPos);
-      this.refresh();
+      this._playMinionAnimation(handIdx, card, boardPos);
     }
+  }
+
+  _playMinionAnimation(handIdx, card, boardPos) {
+    this._positionMode = false;
+    this._pendingPlay = null;
+    const beforeIds = this.bs.player.board.map(m => m.uid);
+    const beforeSet = new Set(beforeIds);
+    playCard(this.bs, 'player', handIdx, null, boardPos);
+    const summoned = this.bs.player.board.filter(m => !beforeSet.has(m.uid) && m.slot !== boardPos);
+
+    summoned.forEach(m => this._hiddenSlots.add(m.slot));
+    this._fallInSlots.add(boardPos);
+    this.refresh();
+
+    summoned.forEach((m, i) => {
+      this.time.delayedCall(500 + i * 350, () => {
+        this._hiddenSlots.delete(m.slot);
+        this._fallInSlots.add(m.slot);
+        const x = SLOT_X(m.slot);
+        this._drawFallingBoardMinion(m, x, BOARD_Y.player);
+      });
+    });
   }
 
   _playSpell(idx, card, ox, oy) {
@@ -1493,11 +1518,136 @@ export default class BattleScene extends Phaser.Scene {
     this._float(tx, ty, `-${dmg}`, '#ff4444');
   }
 
+  _playAttackAnimation(uid, target, tx, ty) {
+    const attacker = this.bs.player.board.find(m => m.uid === uid);
+    if (!attacker) { this._doAttack(uid, target, tx, ty); return; }
+    const dmg = attacker.atk;
+    const ax = SLOT_X(attacker.slot);
+    const ay = BOARD_Y.player;
+    const defender = target.type === 'minion'
+      ? this.bs.enemy.board.find(m => m.uid === target.uid) : null;
+    const counterDmg = defender ? defender.atk : 0;
+
+    this.arrowGfx.clear();
+    this._destroySwordCursor();
+    this.targetMode = false;
+    this.selecting = null;
+    this._selOrigin = null;
+    this.refresh();
+
+    const FLY_S = 40;
+    const flyCard = this.add.container(ax, ay).setDepth(150);
+    flyCard.add(this.add.rectangle(0, 0, FLY_S, FLY_S, 0x3d2800, 0.95).setStrokeStyle(2, 0xddaa22));
+    flyCard.add(this.add.text(0, 0, '\u2694', { fontSize: '18px', fontStyle: 'bold' }).setOrigin(0.5));
+    playSwoosh();
+
+    this.tweens.add({
+      targets: flyCard,
+      x: tx, y: ty,
+      duration: 300,
+      ease: 'Power2.In',
+      onComplete: () => {
+        playImpact();
+        const flash = this.add.rectangle(tx, ty, FLY_S + 16, FLY_S + 16, 0xffdd66, 0.6)
+          .setDepth(155).setStrokeStyle(3, 0xddaa22);
+        this.tweens.add({
+          targets: flash, alpha: 0, scale: 1.4, duration: 280, ease: 'Power2.Out',
+          onComplete: () => { flash.destroy(); }
+        });
+        flyCard.destroy();
+        this.cameras.main.shake(80, 0.006);
+        this._float(tx, ty, `-${dmg}`, '#ff4444');
+
+        const before = this._snapshotBoards();
+        minionAttack(this.bs, 'player', uid, target);
+
+        if (counterDmg > 0) {
+          this._playCounterAnimation(tx, ty, ax, ay, counterDmg, before);
+        } else {
+          this._animateDeaths(before);
+          this.refresh();
+        }
+      }
+    });
+  }
+
+  _playCounterAnimation(fromX, fromY, toX, toY, dmg, before) {
+    const FLY_S = 40;
+    const flyBack = this.add.container(fromX, fromY).setDepth(150);
+    flyBack.add(this.add.rectangle(0, 0, FLY_S, FLY_S, 0x3d2800, 0.95).setStrokeStyle(2, 0xddaa22));
+    flyBack.add(this.add.text(0, 0, '\u2694', { fontSize: '18px', fontStyle: 'bold' }).setOrigin(0.5));
+    playSwoosh();
+
+    this.tweens.add({
+      targets: flyBack,
+      x: toX, y: toY,
+      duration: 300,
+      ease: 'Power2.In',
+      onComplete: () => {
+        playImpact();
+        const flash = this.add.rectangle(toX, toY, FLY_S + 16, FLY_S + 16, 0xffdd66, 0.6)
+          .setDepth(155).setStrokeStyle(3, 0xddaa22);
+        this.tweens.add({
+          targets: flash, alpha: 0, scale: 1.4, duration: 280, ease: 'Power2.Out',
+          onComplete: () => { flash.destroy(); }
+        });
+        flyBack.destroy();
+        this.cameras.main.shake(60, 0.004);
+        this._float(toX, toY, `-${dmg}`, '#ff4444');
+        if (before) this._animateDeaths(before);
+        this.refresh();
+      }
+    });
+  }
+
   _float(x, y, text, color) {
     const t = this.add.text(x, y, text, {
-      ...FONT, fontSize: '14px', color, stroke: '#000', strokeThickness: 3
+      ...FONT, fontSize: '22px', color, stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(200);
-    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 500, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 50, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+  }
+
+  _snapshotBoards() {
+    return {
+      enemy: this.bs.enemy.board.map(m => ({ uid: m.uid, id: m.id, name: m.name, slot: m.slot, keywords: m.keywords })),
+      player: this.bs.player.board.map(m => ({ uid: m.uid, id: m.id, name: m.name, slot: m.slot, keywords: m.keywords }))
+    };
+  }
+
+  _animateDeaths(before) {
+    const enemyAfter = new Set(this.bs.enemy.board.map(m => m.uid));
+    const playerAfter = new Set(this.bs.player.board.map(m => m.uid));
+    for (const m of before.enemy) {
+      if (!enemyAfter.has(m.uid)) this._playDeathAnimation(SLOT_X(m.slot), BOARD_Y.enemy, m);
+    }
+    for (const m of before.player) {
+      if (!playerAfter.has(m.uid)) this._playDeathAnimation(SLOT_X(m.slot), BOARD_Y.player, m);
+    }
+  }
+
+  _playDeathAnimation(x, y, m) {
+    const card = getCardById(m.id);
+    const tex = card ? getCardTextureKey(this, card) : null;
+    const isGuardian = m.keywords && m.keywords.includes('guardian');
+    const bc = isGuardian ? 0x33ddff : 0x774433;
+
+    const ct = this.add.container(x, y).setDepth(150);
+    ct.add(this.add.rectangle(0, 0, CARD_W, CARD_H, 0xf5f5f8, 0.95).setStrokeStyle(2, bc));
+    if (tex) {
+      ct.add(this.add.image(0, ART_ZONE_TOP + ART_ZONE_HEIGHT / 2, tex).setDisplaySize(CARD_W, ART_ZONE_HEIGHT));
+    }
+    ct.add(this.add.rectangle(0, -CARD_H / 2 - BAR_H / 2, CARD_W, BAR_H, 0x05050f, 0.95).setStrokeStyle(1, 0xff0077));
+    ct.add(this.add.text(0, -CARD_H / 2 - BAR_H / 2, m.name.slice(0, 12), { ...FONT, fontSize: '7px', color: '#ff4444' }).setOrigin(0.5));
+
+    this.tweens.add({
+      targets: ct,
+      y: y + 120,
+      alpha: 0,
+      angle: Phaser.Math.Between(-8, 8),
+      duration: 480,
+      ease: 'Power2.In',
+      onComplete: () => { ct.destroy(); }
+    });
   }
 
   _playNewShoesEquipAnimation(targetMinion) {
@@ -1543,7 +1693,7 @@ export default class BattleScene extends Phaser.Scene {
         this.cameras.main.shake(40, 0.003);
         this.time.delayedCall(100, () => {
           playCard(this.bs, 'player', handIndex, { type: 'minion', uid: targetMinion.uid }, null);
-          this._fallInSlot = targetMinion.slot;
+          this._fallInSlots.add(targetMinion.slot);
           this.refresh();
         });
       }
@@ -1593,11 +1743,10 @@ export default class BattleScene extends Phaser.Scene {
       let tx, ty;
       if (info.type === 'hero') { tx = W / 2; ty = HERO_Y.enemy; }
       else {
-        const ti = this.bs.enemy.board.findIndex(m => m.uid === info.uid);
-        const esx = W / 2 - (this.bs.enemy.board.length - 1) * BOARD_GAP / 2;
-        tx = esx + ti * BOARD_GAP; ty = BOARD_Y.enemy;
+        const tm = this.bs.enemy.board.find(m => m.uid === info.uid);
+        tx = tm ? SLOT_X(tm.slot) : W / 2; ty = BOARD_Y.enemy;
       }
-      this._doAttack(this.selecting.uid, info, tx, ty);
+      this._playAttackAnimation(this.selecting.uid, info, tx, ty);
     }
   }
 
