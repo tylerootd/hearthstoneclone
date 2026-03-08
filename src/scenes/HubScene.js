@@ -28,14 +28,15 @@ export default class HubScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const btns = [
-      { label: 'SINGLEPLAYER',  y: 200, cb: () => this.scene.start('Overworld') },
-      { label: 'MULTIPLAYER',   y: 255, cb: () => this._pickUsername(), color: '#44ffaa' },
-      { label: 'CARD FORGE',    y: 310, cb: () => this.scene.start('Crafting') },
-      { label: 'QUICK BATTLE',  y: 365, cb: () => this.scene.start('DeckSelect') },
-      { label: 'DECK BUILDER',  y: 420, cb: () => this.scene.start('DeckBuilder') },
-      { label: 'MASTER MODE',   y: 475, cb: () => this.scene.start('MasterMode') },
-      { label: 'TUTORIAL',      y: 530, cb: () => this.scene.start('Tutorial'), color: '#ffcc44' },
-      { label: 'RESET SAVE',    y: 580, cb: () => { resetSave(); this.scene.start('Boot'); } }
+      { label: 'SINGLEPLAYER',  y: 195, cb: () => this.scene.start('Overworld') },
+      { label: 'MULTIPLAYER',   y: 245, cb: () => this._pickUsername('MmoMap'), color: '#44ffaa' },
+      { label: 'SUPER RETRO',   y: 295, cb: () => this._pickUsername('SuperRetroMap'), color: '#ff8844' },
+      { label: 'CARD FORGE',    y: 345, cb: () => this.scene.start('Crafting') },
+      { label: 'QUICK BATTLE',  y: 395, cb: () => this.scene.start('DeckSelect') },
+      { label: 'DECK BUILDER',  y: 445, cb: () => this.scene.start('DeckBuilder') },
+      { label: 'MASTER MODE',   y: 495, cb: () => this.scene.start('MasterMode') },
+      { label: 'TUTORIAL',      y: 545, cb: () => this.scene.start('Tutorial'), color: '#ffcc44' },
+      { label: 'RESET SAVE',    y: 590, cb: () => { resetSave(); this.scene.start('Boot'); } }
     ];
 
     btns.forEach(({ label, y, cb, color }) => {
@@ -55,7 +56,7 @@ export default class HubScene extends Phaser.Scene {
     });
   }
 
-  _pickUsername() {
+  _pickUsername(targetScene = 'MmoMap') {
     if (this._nameBox) return;
 
     const overlay = document.createElement('div');
@@ -121,7 +122,7 @@ export default class HubScene extends Phaser.Scene {
       const name = input.value.trim();
       if (!name) { input.style.borderColor = '#ff4444'; return; }
       cleanup();
-      this.scene.start('MmoMap', { username: name });
+      this.scene.start(targetScene, { username: name });
     };
 
     makeBtn('JOIN', '#226644', go);

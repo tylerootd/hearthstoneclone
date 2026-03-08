@@ -42,6 +42,18 @@ export default class BootScene extends Phaser.Scene {
     this.load.image('town-tiles', `${TUXEMON}/tilesets/tuxmon-sample-32px-extruded.png`);
     this.load.tilemapTiledJSON('town-map', `${TUXEMON}/tilemaps/tuxemon-town.json`);
 
+    // Super Retro Collection tileset + map
+    this.load.image('super-retro-tiles', './tilesets/gigantic_pack.png');
+    this.load.tilemapTiledJSON('super-retro-map', './maps/super-retro-town.json');
+
+    // Super Retro house + door (for map transitions)
+    const SRC = './Super_retro_collection';
+    this.load.image('retro_house_tl', `${SRC}/building/Resources__Environments__TilePalette__Autotiles__root__atlas__house_autotile_0_0.png`);
+    this.load.image('retro_house_tr', `${SRC}/building/Resources__Environments__TilePalette__Autotiles__root__atlas__house_autotile_0_1.png`);
+    this.load.image('retro_house_bl', `${SRC}/building/Resources__Environments__TilePalette__Autotiles__root__atlas__house_autotile_1_0.png`);
+    this.load.image('retro_house_br', `${SRC}/building/Resources__Environments__TilePalette__Autotiles__root__atlas__house_autotile_1_1.png`);
+    this.load.spritesheet('retro_door', `${SRC}/animated/Resources__Animations__Door__door_0_16x16.png`, { frameWidth: 16, frameHeight: 16 });
+
     this.load.image('dragons_den_building', './dragons_den.png');
     this.load.image('battle_board', './battle_board.png');
 
